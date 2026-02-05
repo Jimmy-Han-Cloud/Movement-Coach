@@ -26,7 +26,8 @@ def get_current_user(request: Request) -> str:
     token = authorization.removeprefix("Bearer ")
     try:
         decoded = auth.verify_id_token(token)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Token verification failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     uid: str = decoded["uid"]
