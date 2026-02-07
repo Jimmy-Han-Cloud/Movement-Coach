@@ -89,6 +89,12 @@ function GameContent() {
     onValidation: () => {},
   });
 
+  // Extract head and shoulder Y for smart framing
+  const headY = pose.trackedPoints?.head?.y;
+  const shoulderY = pose.trackedPoints?.left_shoulder && pose.trackedPoints?.right_shoulder
+    ? (pose.trackedPoints.left_shoulder.y + pose.trackedPoints.right_shoulder.y) / 2
+    : undefined;
+
   // Start webcam on mount
   const hasStartedRef = useRef(false);
   if (!hasStartedRef.current && typeof window !== "undefined") {
@@ -259,6 +265,8 @@ function GameContent() {
       <CameraLayout
         videoRef={webcam.videoRef}
         pageType="game"
+        headY={headY}
+        shoulderY={shoulderY}
         dimmed={!!activeDialog || showResult}
         avatarOverlay={
           <AvatarOverlay

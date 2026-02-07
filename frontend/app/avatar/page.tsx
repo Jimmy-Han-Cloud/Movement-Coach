@@ -61,13 +61,42 @@ export default function AvatarSetupPage() {
     onValidation: () => {},
   });
 
-  // Extract hand positions for gesture detection
+  // Extract fingertip positions for gesture detection
+  // Estimate fingertip = wrist + (wrist - elbow) * 0.4 (hand length ≈ 40% of forearm)
   const handPositions = pose.trackedPoints
-    ? [
-        pose.trackedPoints.left_hand,
-        pose.trackedPoints.right_hand,
-      ].filter((p): p is { x: number; y: number } => p !== undefined)
+    ? (() => {
+        const points = pose.trackedPoints;
+        const results: Array<{ x: number; y: number }> = [];
+
+        // Left hand fingertip estimation
+        if (points.left_hand && points.left_elbow) {
+          const wrist = points.left_hand;
+          const elbow = points.left_elbow;
+          results.push({
+            x: wrist.x + (wrist.x - elbow.x) * 0.4,
+            y: wrist.y + (wrist.y - elbow.y) * 0.4,
+          });
+        }
+
+        // Right hand fingertip estimation
+        if (points.right_hand && points.right_elbow) {
+          const wrist = points.right_hand;
+          const elbow = points.right_elbow;
+          results.push({
+            x: wrist.x + (wrist.x - elbow.x) * 0.4,
+            y: wrist.y + (wrist.y - elbow.y) * 0.4,
+          });
+        }
+
+        return results;
+      })()
     : [];
+
+  // Extract head and shoulder Y for smart framing
+  const headY = pose.trackedPoints?.head?.y;
+  const shoulderY = pose.trackedPoints?.left_shoulder && pose.trackedPoints?.right_shoulder
+    ? (pose.trackedPoints.left_shoulder.y + pose.trackedPoints.right_shoulder.y) / 2
+    : undefined;
 
   // Start webcam on mount
   const hasStartedRef = useRef(false);
@@ -181,6 +210,8 @@ export default function AvatarSetupPage() {
     <CameraLayout
       videoRef={webcam.videoRef}
       pageType="avatar-setup"
+      headY={headY}
+      shoulderY={shoulderY}
       avatarOverlay={
         <AvatarOverlay
           avatarUrl={avatarUrl}

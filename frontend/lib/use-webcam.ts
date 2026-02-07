@@ -19,24 +19,22 @@ export function useWebcam(): UseWebcamReturn {
 
   const start = useCallback(async () => {
     try {
+      // Request 16:9 resolution for better framing
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 },
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
       setStream(mediaStream);
-      // Note: video element may not exist yet; the effect below will attach the stream
     } catch (e) {
       setError(e instanceof Error ? e.message : "Camera access denied");
     }
   }, []);
 
   // Effect to attach stream to video element when both are available
-  // This handles the case where stream is ready before the video element mounts
   useEffect(() => {
     const video = videoRef.current;
     if (!stream || !video) return;
 
-    // Check if already attached
     if (video.srcObject === stream) {
       if (!ready) setReady(true);
       return;
@@ -50,9 +48,7 @@ export function useWebcam(): UseWebcamReturn {
     });
   }, [stream, ready]);
 
-  // Re-run effect when videoRef.current changes (element mounts)
-  // We use a MutationObserver-like pattern via callback ref is complex,
-  // so we trigger re-check on a short interval when stream exists but not ready
+  // Re-run effect when videoRef.current changes
   useEffect(() => {
     if (!stream || ready) return;
 

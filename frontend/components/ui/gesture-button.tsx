@@ -12,6 +12,7 @@ interface GestureButtonProps {
   handPositions?: Array<{ x: number; y: number }>;
   dwellTime?: number;
   debounceTime?: number;
+  stickyTime?: number; // Grace period before resetting hover
 }
 
 export function GestureButton({
@@ -22,14 +23,16 @@ export function GestureButton({
   position = "center",
   className = "",
   handPositions = [],
-  dwellTime = 500,
+  dwellTime = 300, // Reduced from 500ms for quicker response
   debounceTime = 2000,
+  stickyTime = 200, // 200ms grace period
 }: GestureButtonProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isTriggered, setIsTriggered] = useState(false);
   const [canTrigger, setCanTrigger] = useState(true);
   const dwellTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const variantStyles = {
     primary: "bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white",
@@ -48,7 +51,16 @@ export function GestureButton({
         clearTimeout(dwellTimerRef.current);
         dwellTimerRef.current = null;
       }
-      setIsHovering(false);
+      // Don't reset hover immediately - use sticky behavior
+      if (!isHovering) return;
+
+      // Start leave timer if not already running
+      if (!leaveTimerRef.current) {
+        leaveTimerRef.current = setTimeout(() => {
+          setIsHovering(false);
+          leaveTimerRef.current = null;
+        }, stickyTime);
+      }
       return;
     }
 
@@ -63,40 +75,58 @@ export function GestureButton({
       bottom: rect.bottom / windowHeight,
     };
 
+    // Increased padding for easier targeting (15%)
+    const padding = 0.15;
     const isOverButton = handPositions.some(
       (hand) =>
-        1 - hand.x >= buttonBounds.left &&
-        1 - hand.x <= buttonBounds.right &&
-        hand.y >= buttonBounds.top &&
-        hand.y <= buttonBounds.bottom
+        1 - hand.x >= buttonBounds.left - padding &&
+        1 - hand.x <= buttonBounds.right + padding &&
+        hand.y >= buttonBounds.top - padding &&
+        hand.y <= buttonBounds.bottom + padding
     );
 
-    if (isOverButton && !isHovering) {
-      setIsHovering(true);
-      dwellTimerRef.current = setTimeout(() => {
-        if (!disabled && canTrigger) {
-          setIsTriggered(true);
-          setCanTrigger(false);
-          onTrigger();
-          setTimeout(() => setIsTriggered(false), 400);
-          setTimeout(() => setCanTrigger(true), debounceTime);
-        }
-      }, dwellTime);
-    } else if (!isOverButton && isHovering) {
-      setIsHovering(false);
-      if (dwellTimerRef.current) {
-        clearTimeout(dwellTimerRef.current);
-        dwellTimerRef.current = null;
+    if (isOverButton) {
+      // Clear leave timer if hand comes back
+      if (leaveTimerRef.current) {
+        clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
+      }
+
+      if (!isHovering) {
+        setIsHovering(true);
+        dwellTimerRef.current = setTimeout(() => {
+          if (!disabled && canTrigger) {
+            setIsTriggered(true);
+            setCanTrigger(false);
+            onTrigger();
+            setTimeout(() => setIsTriggered(false), 400);
+            setTimeout(() => setCanTrigger(true), debounceTime);
+          }
+        }, dwellTime);
+      }
+    } else if (isHovering) {
+      // Hand left - start sticky timer instead of immediate reset
+      if (!leaveTimerRef.current) {
+        leaveTimerRef.current = setTimeout(() => {
+          setIsHovering(false);
+          if (dwellTimerRef.current) {
+            clearTimeout(dwellTimerRef.current);
+            dwellTimerRef.current = null;
+          }
+          leaveTimerRef.current = null;
+        }, stickyTime);
       }
     }
-    // Note: No cleanup here - timer is managed by the logic above
-    // Cleanup on unmount is handled by the separate useEffect below
-  }, [handPositions, disabled, canTrigger, isHovering, dwellTime, debounceTime, onTrigger]);
+  }, [handPositions, disabled, canTrigger, isHovering, dwellTime, debounceTime, stickyTime, onTrigger]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (dwellTimerRef.current) {
         clearTimeout(dwellTimerRef.current);
+      }
+      if (leaveTimerRef.current) {
+        clearTimeout(leaveTimerRef.current);
       }
     };
   }, []);
