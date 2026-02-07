@@ -1,18 +1,56 @@
-import Link from "next/link";
+"use client";
 
-export default function Home() {
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { WelcomeLayout } from "@/components/layouts";
+import { ProductInfo, DemoAnimation, RemotePanel } from "@/components/welcome";
+import { Button } from "@/components/ui";
+
+/**
+ * Page 1 — Welcome
+ * Per UX Specification v1.0 Section 3
+ *
+ * Layout: Left–Center–Right
+ * - Left: Product Info, Key benefits, Trust framing
+ * - Center: Cartoon Animation (demo), START button
+ * - Right: QR Code, Remote Status, Legal (collapsed)
+ */
+export default function WelcomePage() {
+  const router = useRouter();
+  const [isRemoteConnected, setIsRemoteConnected] = useState(false);
+
+  const handleStart = () => {
+    router.push("/avatar");
+  };
+
+  // TODO: Implement remote connection via WebSocket
+  // For now, this is a placeholder
+
   return (
-    <div className="flex min-h-screen items-center justify-center flex-col gap-6">
-      <h1 className="text-3xl font-semibold">Movement Coach</h1>
-      <p className="text-zinc-500 text-sm max-w-xs text-center">
-        A guided movement experience for seated computer users.
-      </p>
-      <Link
-        href="/session"
-        className="px-6 py-3 bg-zinc-900 text-white rounded-xl text-lg font-medium hover:bg-zinc-700 transition-colors"
-      >
-        Begin Session
-      </Link>
-    </div>
+    <WelcomeLayout
+      leftPanel={<ProductInfo />}
+      centerPanel={
+        <div className="flex flex-col items-center gap-[var(--spacing-6)]">
+          {/* Demo Animation */}
+          <DemoAnimation />
+
+          {/* START Button - Primary CTA */}
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleStart}
+            className="min-w-[200px] text-xl font-semibold shadow-[var(--shadow-glow)] hover:shadow-[0_0_30px_rgb(59_130_246/0.6)]"
+          >
+            START
+          </Button>
+        </div>
+      }
+      rightPanel={
+        <RemotePanel
+          isConnected={isRemoteConnected}
+          pairingCode="MC-1234"
+        />
+      }
+    />
   );
 }
