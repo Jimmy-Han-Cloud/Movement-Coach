@@ -4,8 +4,8 @@ import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CameraLayout, ResultModal } from "@/components/layouts";
 import { AvatarOverlay } from "@/components/avatar";
-import { SongDisplay, SwitchingOverlay, GameHud, type Song } from "@/components/game";
-import { ConfirmDialog, type DialogType } from "@/components/ui";
+import { SongDisplay, SwitchingOverlay, PauseOverlay, GameHud, type Song } from "@/components/game";
+import { ConfirmDialog, CameraError, type DialogType } from "@/components/ui";
 import { useWebcam } from "@/lib/use-webcam";
 import { usePoseValidation } from "@/modules/pose-validation";
 
@@ -267,7 +267,7 @@ function GameContent() {
         pageType="game"
         headY={headY}
         shoulderY={shoulderY}
-        dimmed={!!activeDialog || showResult}
+        dimmed={!!activeDialog || showResult || gameState === "paused"}
         avatarOverlay={
           <AvatarOverlay
             avatarUrl="/avatar-placeholder.png"
@@ -289,7 +289,8 @@ function GameContent() {
           />
         }
         centerOverlay={
-          gameState === "switching" ? <SwitchingOverlay /> : null
+          gameState === "switching" ? <SwitchingOverlay /> :
+          gameState === "paused" ? <PauseOverlay /> : null
         }
       />
 
@@ -311,6 +312,11 @@ function GameContent() {
         onNewSong={handleNewSong}
         onExit={handleExit}
       />
+
+      {/* Camera Error */}
+      {webcam.error && (
+        <CameraError error={webcam.error} onRetry={webcam.retry} />
+      )}
     </>
   );
 }

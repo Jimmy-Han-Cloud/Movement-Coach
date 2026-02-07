@@ -19,3 +19,5 @@ export { GoBubble } from "./go-bubble";
 
 export { ConfirmDialog } from "./confirm-dialog";
 export type { DialogType } from "./confirm-dialog";
+
+export { CameraError } from "./camera-error";

@@ -9,6 +9,7 @@ interface UseWebcamReturn {
   error: string | null;
   start: () => Promise<void>;
   stop: () => void;
+  retry: () => Promise<void>;
 }
 
 export function useWebcam(): UseWebcamReturn {
@@ -76,11 +77,21 @@ export function useWebcam(): UseWebcamReturn {
     }
   }, [stream]);
 
+  const retry = useCallback(async () => {
+    setError(null);
+    setReady(false);
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      setStream(null);
+    }
+    await start();
+  }, [stream, start]);
+
   useEffect(() => {
     return () => {
       stream?.getTracks().forEach((t) => t.stop());
     };
   }, [stream]);
 
-  return { videoRef, stream, ready, error, start, stop };
+  return { videoRef, stream, ready, error, start, stop, retry };
 }

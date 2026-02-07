@@ -112,13 +112,121 @@
 - [x] HUD 显示（时间、状态、Phase 信息）
 - [x] **UI/UX Design System 完成**
 - [x] **4个页面布局完成**
+- [x] **Smart Framing 智能取景**（MediaPipe head/shoulder → 动态 object-position）
+- [x] **手势触发优化**（GoBubble 150px, dwell 200ms, sticky hover, 15% padding）
+- [x] **歌曲选择移至 Page 2**
 - [ ] Rive 动画是占位符
 - [ ] 手机遥控器未实现（WebSocket）
 - [ ] Avatar 生成 API 集成
 
 ---
 
+## V1 Demo 稳定性检查清单
+
+### 目标
+**一次完整会话：setup → play → result，固定流程，清晰反馈**
+
+### 流程完整性
+
+| 步骤 | 状态 | 说明 |
+|------|------|------|
+| Page 1 → Page 2 | ✅ | START 按钮正常 |
+| Page 2 Avatar 生成 | ✅ | 2秒占位符动画 |
+| Page 2 歌曲选择 | ✅ | 5首歌曲 + ◀/▶ |
+| Page 2 → Page 3 | ✅ | GoBubble + songId 参数 |
+| Page 3 游戏循环 | ✅ | 计时器运行 |
+| Page 3 暂停/继续 | ✅ | Enter/Space |
+| Page 3 → Result | ✅ | 计时器结束触发 |
+| Result → 重玩 | ✅ | 重置计时器 |
+| Result → 新歌曲 | ✅ | 返回 Page 2 |
+| Result → 退出 | ✅ | 返回 Page 1 |
+
+### 错误处理
+
+| 场景 | 状态 | 说明 |
+|------|------|------|
+| 摄像头被拒绝 | ✅ | 显示错误 + Try Again 按钮 |
+| MediaPipe 加载失败 | ⚠️ | 静默失败，游戏仍可运行 |
+| 网络离线 | ⚠️ | API 调用失败，无离线模式 |
+
+### 视觉反馈
+
+| 元素 | 状态 | 说明 |
+|------|------|------|
+| 加载状态 | ✅ | Auth/Data/Webcam |
+| Avatar 状态徽章 | ✅ | idle/generating/previewing/locked |
+| 游戏 HUD | ✅ | 计时器 + 状态 |
+| 歌曲进度 | ✅ | 进度条 |
+| 暂停覆盖层 | ✅ | 半透明背景 + Paused 文字 + 继续提示 |
+| 动作指引 | ❌ | 无"做什么"提示 |
+
+### V1 Demo 关键缺口
+
+#### 必须修复 (Critical)
+
+1. **无动作指引** ⬅️ 待解决
+   - 游戏只有计时器
+   - 用户不知道该做什么动作
+   - 需要：卡通形象根据 Flow 做动作引导用户
+
+2. **~~暂停状态不明显~~** ✅ 已修复 (2026-02-06)
+   - 添加 `PauseOverlay` 组件
+   - 显示暂停图标 + "Paused" 文字
+   - 显示 "Press Enter or remote confirm to resume" 提示
+   - 摄像头画面变暗
+
+3. **~~摄像头错误恢复~~** ✅ 已修复 (2026-02-06)
+   - 添加 `CameraError` 组件
+   - 显示摄像头错误图标 + 错误信息
+   - 显示 "Try Again" 重试按钮
+   - `use-webcam.ts` 添加 `retry()` 函数
+
+#### 可选优化 (Nice to Have)
+
+4. **MediaPipe 加载指示器**
+   - 目前静默加载
+   - 可显示"准备摄像头..."
+
+5. **离线回退**
+   - API 调用静默失败
+   - 可缓存上次的 flow/params
+
+### 键盘控制（远程模拟）
+
+| 按键 | 功能 |
+|------|------|
+| Enter / Space | 暂停/继续 |
+| ArrowLeft | 返回 Avatar 页 |
+| ArrowRight | 提前结束 |
+| S | 切换歌曲 |
+
+### 技术细节
+
+#### Smart Framing
+- 请求 1280×720 视频
+- 使用 `object-cover` + 动态 `object-position`
+- 从 MediaPipe head/shoulder Y 计算偏移
+- EMA 平滑（系数 0.1）
+- 边界：10-40%，默认 25%
+
+#### 手势检测
+- 指尖估算：wrist + (wrist - elbow) × 0.4
+- Dwell time：300ms (GestureButton), 200ms (GoBubble)
+- Debounce：2000ms
+- Sticky hover：200ms 宽限期
+- Padding：15% 增大触发区域
+
+---
+
 ## 下一步计划
+
+### 🔴 V1 Stable Demo（当前优先）
+目标：**一次可靠的完整会话 demo**
+
+- [x] 添加暂停视觉覆盖层 ✅ (2026-02-06)
+- [x] 添加摄像头错误重试按钮 ✅ (2026-02-06)
+- [ ] **卡通形象动作引导系统** ⬅️ 当前任务
+- [ ] 端到端测试完整流程
 
 ### Rive — Phase 1（最小可用动画）
 - [ ] 创建基础 Rive 动画文件
@@ -175,4 +283,4 @@ cd frontend && npm run dev
 
 ---
 
-*最后更新: 2026-02-06*
+*最后更新: 2026-02-06 (Gap 2 & 3 fixed: PauseOverlay + CameraError)*

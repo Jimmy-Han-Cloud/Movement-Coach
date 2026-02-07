@@ -4,7 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CameraLayout } from "@/components/layouts";
 import { TipBox, AvatarOverlay, SongCarousel, type Song } from "@/components/avatar";
-import { GestureButton, StatusBadge, GoBubble } from "@/components/ui";
+import { GestureButton, StatusBadge, GoBubble, CameraError } from "@/components/ui";
 import { useWebcam } from "@/lib/use-webcam";
 import { usePoseValidation } from "@/modules/pose-validation";
 
@@ -207,12 +207,13 @@ export default function AvatarSetupPage() {
   const rightBtn = getRightButton();
 
   return (
-    <CameraLayout
-      videoRef={webcam.videoRef}
-      pageType="avatar-setup"
-      headY={headY}
-      shoulderY={shoulderY}
-      avatarOverlay={
+    <>
+      <CameraLayout
+        videoRef={webcam.videoRef}
+        pageType="avatar-setup"
+        headY={headY}
+        shoulderY={shoulderY}
+        avatarOverlay={
         <AvatarOverlay
           avatarUrl={avatarUrl}
           isLocked={avatarState === "locked"}
@@ -267,12 +268,18 @@ export default function AvatarSetupPage() {
         )
       }
     >
-      {/* Song Carousel - visible in selecting-song state */}
-      <SongCarousel
-        songs={PRESET_SONGS}
-        currentIndex={currentSongIndex}
-        visible={avatarState === "selecting-song"}
-      />
-    </CameraLayout>
+        {/* Song Carousel - visible in selecting-song state */}
+        <SongCarousel
+          songs={PRESET_SONGS}
+          currentIndex={currentSongIndex}
+          visible={avatarState === "selecting-song"}
+        />
+      </CameraLayout>
+
+      {/* Camera Error */}
+      {webcam.error && (
+        <CameraError error={webcam.error} onRetry={webcam.retry} />
+      )}
+    </>
   );
 }
