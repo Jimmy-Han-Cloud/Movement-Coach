@@ -663,6 +663,69 @@ export function RiveCharacter({ phaseType, poseIndex, emotion }: RiveCharacterPr
 
 ---
 
+## Part 6: 架构实现状态
+
+> 对比设计架构与实际实现
+
+### 设计架构（Hard Boundary）
+
+```
+Frontend (Next.js):
+- Webcam getUserMedia
+- MediaPipe Pose to extract the 7 points
+- Real-time Phase Engine + validators
+- Rive animation playback (reference guide)
+- Visual feedback overlays
+
+Backend (Python FastAPI on Cloud Run):
+- Firebase Anonymous Auth integration
+- Firestore storage: users, sessions, flows, personalization params
+- Post-session Gemini summarization only (no real-time)
+- Stores only symbolic session outcomes, not raw frames
+```
+
+### Frontend 实现状态
+
+| 设计要求 | 状态 | 实现位置 |
+|---------|------|---------|
+| Webcam getUserMedia | ✅ 已完成 | `lib/use-webcam.ts` |
+| MediaPipe Pose (7 points) | ✅ 已完成 | `modules/pose-validation/mediapipe-tracker.ts` |
+| Real-time Phase Engine | ✅ 已完成 | `modules/flow-engine/phase-engine.ts` |
+| Validators | ✅ 已完成 | `modules/pose-validation/pose-hold-validator.ts`, `hand-motion-validator.ts` |
+| Rive animation playback | ⚠️ 占位符 | `modules/visual-feedback/rive-character.tsx` (无实际动画) |
+| Visual feedback overlays | ✅ 已完成 | `modules/visual-feedback/phase-hud.tsx`, `skeleton-canvas.tsx` |
+
+### Backend 实现状态
+
+| 设计要求 | 状态 | 实现位置 |
+|---------|------|---------|
+| Firebase Anonymous Auth | ✅ 已完成 | `backend/app/services/auth.py` |
+| Firestore - users | ⚠️ 需验证 | 可能在 user_params 中 |
+| Firestore - sessions | ✅ 已完成 | `backend/app/routers/sessions.py` |
+| Firestore - flows | ✅ 已完成 | `backend/app/routers/flows.py` |
+| Firestore - personalization params | ✅ 已完成 | `backend/app/routers/user_params.py` |
+| Post-session Gemini summarization | ✅ 已完成 | `backend/app/services/gemini.py` |
+| Symbolic outcomes only (no raw frames) | ✅ 符合设计 | 无图像存储逻辑 |
+
+### 未完成项目
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| Rive 动画 | ❌ 未完成 | 组件存在但无实际 .riv 文件和动画 |
+| Avatar 生成 API | ❌ 未集成 | 前端是 2 秒占位符，后端有 `avatar.py` 但未连接 |
+| 音乐分析 → Flow 生成 | ❓ 需验证 | WORKFLOW 说要分析音乐生成 Flow，需确认后端是否实现 |
+| 手机遥控器 | ❌ 未完成 | WebSocket 未实现，QR 配对未实现 |
+
+### 差距总结
+
+| 类别 | 设计 | 现状 | 差距 |
+|------|------|------|------|
+| 前端核心 | 5 项 | 4 项完成 | Rive 未完成 |
+| 后端核心 | 4 项 | 4 项完成 | ✅ 一致 |
+| 额外功能 | - | - | Avatar API、音乐分析、遥控器 |
+
+---
+
 ## Part 7: 关键技术决策记录
 
 > 记录开发过程中的重要设计决策

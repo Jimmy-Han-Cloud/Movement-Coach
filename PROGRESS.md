@@ -121,6 +121,43 @@
 
 ---
 
+## 架构实现状态
+
+> 对比设计架构与实际实现（详见 WORKFLOW.md Part 6）
+
+### Frontend 实现状态
+
+| 设计要求 | 状态 | 说明 |
+|---------|------|------|
+| Webcam getUserMedia | ✅ | `lib/use-webcam.ts` |
+| MediaPipe Pose (7 points) | ✅ | `modules/pose-validation/` |
+| Real-time Phase Engine | ✅ | `modules/flow-engine/` |
+| Validators | ✅ | `pose-hold-validator.ts`, `hand-motion-validator.ts` |
+| Rive animation | ⚠️ 占位符 | 组件存在，无实际动画 |
+| Visual feedback overlays | ✅ | `phase-hud.tsx`, `skeleton-canvas.tsx` |
+
+### Backend 实现状态
+
+| 设计要求 | 状态 | 说明 |
+|---------|------|------|
+| Firebase Anonymous Auth | ✅ | `backend/app/services/auth.py` |
+| Firestore - sessions | ✅ | `backend/app/routers/sessions.py` |
+| Firestore - flows | ✅ | `backend/app/routers/flows.py` |
+| Firestore - user params | ✅ | `backend/app/routers/user_params.py` |
+| Gemini summarization | ✅ | `backend/app/services/gemini.py` |
+| Symbolic outcomes only | ✅ | 无图像存储 |
+
+### 待完成项目
+
+| 功能 | 优先级 | 说明 |
+|------|--------|------|
+| Rive 动画 | 🔴 高 | V1 Demo 必需 |
+| Avatar 生成 API 集成 | 🟡 中 | 后端存在，前端未连接 |
+| 音乐 → Flow 生成 | 🟡 中 | 需验证后端实现 |
+| 手机遥控器 | 🟢 低 | V1.1 功能 |
+
+---
+
 ## V1 Demo 稳定性检查清单
 
 ### 目标
@@ -283,4 +320,4 @@ cd frontend && npm run dev
 
 ---
 
-*最后更新: 2026-02-06 (Gap 2 & 3 fixed: PauseOverlay + CameraError)*
+*最后更新: 2026-02-06 (架构实现状态分析添加)*

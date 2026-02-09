@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CameraLayout } from "@/components/layouts";
 import { TipBox, AvatarOverlay, SongCarousel, type Song } from "@/components/avatar";
@@ -46,6 +46,7 @@ export default function AvatarSetupPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showTip, setShowTip] = useState(true);
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
+  const [generationFailed, setGenerationFailed] = useState(false);
 
   // Initialize pose detection for hand tracking
   const pose = usePoseValidation({
@@ -110,6 +111,7 @@ export default function AvatarSetupPage() {
     if (avatarState === "generating") return;
 
     setAvatarState("generating");
+    setGenerationFailed(false);
 
     try {
       // TODO: Implement actual avatar generation
@@ -120,6 +122,7 @@ export default function AvatarSetupPage() {
       setShowTip(false);
     } catch (error) {
       console.error("Avatar generation failed:", error);
+      setGenerationFailed(true);
       setAvatarState("idle");
     }
   }, [avatarState]);
@@ -154,6 +157,7 @@ export default function AvatarSetupPage() {
 
   // Map state to StatusBadge type
   const getStatusBadgeType = () => {
+    if (avatarState === "idle" && generationFailed) return "failed";
     switch (avatarState) {
       case "generating":
         return "generating";
@@ -206,6 +210,52 @@ export default function AvatarSetupPage() {
   const leftBtn = getLeftButton();
   const rightBtn = getRightButton();
 
+  // Keyboard mapping for remote simulation
+  // ArrowLeft = left button action, ArrowRight = right button action
+  // Enter/Space = primary forward action per state
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (avatarState) {
+        case "idle":
+          if (e.key === "ArrowLeft" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleGenerate();
+          }
+          break;
+        case "generating":
+          // All inputs disabled during generation
+          break;
+        case "previewing":
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            handleGenerate(); // Regenerate
+          } else if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleConfirmAvatar();
+          }
+          break;
+        case "selecting-song":
+          if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            handlePrevSong();
+          } else if (e.key === "ArrowRight") {
+            e.preventDefault();
+            handleNextSong();
+          } else if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleLockAndStart();
+          }
+          break;
+        case "locked":
+          // All inputs disabled during transition
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [avatarState, handleGenerate, handleConfirmAvatar, handlePrevSong, handleNextSong, handleLockAndStart]);
+
   return (
     <>
       <CameraLayout
@@ -229,7 +279,7 @@ export default function AvatarSetupPage() {
         )
       }
       topRight={
-        avatarState !== "idle" && (
+        (avatarState !== "idle" || generationFailed) && (
           <StatusBadge status={getStatusBadgeType()} />
         )
       }

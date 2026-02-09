@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { WelcomeLayout } from "@/components/layouts";
 import { ProductInfo, DemoAnimation, RemotePanel } from "@/components/welcome";
@@ -19,9 +19,21 @@ export default function WelcomePage() {
   const router = useRouter();
   const [isRemoteConnected, setIsRemoteConnected] = useState(false);
 
-  const handleStart = () => {
+  const handleStart = useCallback(() => {
     router.push("/avatar");
-  };
+  }, [router]);
+
+  // Keyboard mapping: Enter/Space → START
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        handleStart();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleStart]);
 
   // TODO: Implement remote connection via WebSocket
   // For now, this is a placeholder

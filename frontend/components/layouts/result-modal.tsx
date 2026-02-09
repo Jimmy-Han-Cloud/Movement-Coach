@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useCallback } from "react";
 import { Button } from "../ui/button";
 
 interface ResultModalProps {
@@ -20,6 +20,33 @@ function getEncouragement(percent: number): { emoji: string; message: string } {
 }
 
 export function ResultModal({ isOpen, completionPercent, onRepeat, onNewSong, onExit, children }: ResultModalProps) {
+  // Keyboard mapping: ArrowLeft=Repeat, Enter/Space=New Song, ArrowRight=Exit
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!isOpen) return;
+    switch (e.key) {
+      case "ArrowLeft":
+        e.preventDefault();
+        onRepeat();
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        onNewSong();
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        onExit();
+        break;
+    }
+  }, [isOpen, onRepeat, onNewSong, onExit]);
+
+  useEffect(() => {
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, handleKeyDown]);
+
   if (!isOpen) return null;
 
   const { emoji, message } = getEncouragement(completionPercent);

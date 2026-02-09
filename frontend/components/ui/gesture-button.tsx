@@ -23,7 +23,7 @@ export function GestureButton({
   position = "center",
   className = "",
   handPositions = [],
-  dwellTime = 300, // Reduced from 500ms for quicker response
+  dwellTime = 400, // Balanced between responsiveness and Spec (500ms)
   debounceTime = 2000,
   stickyTime = 200, // 200ms grace period
 }: GestureButtonProps) {
