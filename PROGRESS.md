@@ -97,10 +97,10 @@
 | Page 4 - Result | 内嵌于 `/game` | `ResultModal` 组件 |
 
 #### 特性
-- 手势触发交互（手与按钮重合 500ms 触发）
+- 手势触发交互（GestureButton 400ms dwell, GoBubble 200ms dwell, 2s debounce）
 - 确认对话框系统（返回/结束/切歌）
-- 状态管理（Idle → Playing → Paused → Switching）
-- 远程控制键盘映射
+- 状态管理（Playing → Paused → Switching → Finished）
+- 全页面键盘映射（P1/P2/P3/P4 全覆盖）
 
 ---
 
@@ -115,6 +115,11 @@
 - [x] **Smart Framing 智能取景**（MediaPipe head/shoulder → 动态 object-position）
 - [x] **手势触发优化**（GoBubble 150px, dwell 200ms, sticky hover, 15% padding）
 - [x] **歌曲选择移至 Page 2**
+- [x] **全页面键盘映射** (2026-02-09) — P1/P2/P3/P4 所有状态
+- [x] **Avatar 生成失败 UI** (2026-02-09) — 红色 StatusBadge "Generation failed. Retry."
+- [x] **UX_SPEC.md v1.1** (2026-02-09) — 与实现对齐的权威 UX 文档
+- [ ] Phase 模板库存入 Firestore ⬅️ 当前任务
+- [ ] Flow 动态生成服务
 - [ ] Rive 动画是占位符
 - [ ] 手机遥控器未实现（WebSocket）
 - [ ] Avatar 生成 API 集成
@@ -151,10 +156,101 @@
 
 | 功能 | 优先级 | 说明 |
 |------|--------|------|
+| Phase 模板库 → Firestore | 🔴 高 | 10 个 Phase 已设计，待存入数据库 |
+| Flow 动态生成服务 | 🔴 高 | 从 Phase 库组合 Flow，替换硬编码 |
 | Rive 动画 | 🔴 高 | V1 Demo 必需 |
 | Avatar 生成 API 集成 | 🟡 中 | 后端存在，前端未连接 |
-| 音乐 → Flow 生成 | 🟡 中 | 需验证后端实现 |
 | 手机遥控器 | 🟢 低 | V1.1 功能 |
+
+---
+
+## Phase 模板库设计（2026-02-09 确认）
+
+### 概述
+
+Phase 模板是独立的可复用动作片段，存储于 Firestore `phases` 集合。Flow 生成服务根据歌曲节奏/时长从模板库中选取并编排成完整 Flow。
+
+**现状对比：**
+- 现有 `services/flow.py` 中 Flow/Phase 是**硬编码**在代码里的（1 个 Flow, 8 个内联 Phase）
+- 目标：Phase 作为独立实体存入 Firestore，Flow 由生成服务动态组装
+
+### 10 个 Phase 模板
+
+| # | ID | 类型 | Beats | Tempo | 意图 |
+|---|---|---|---|---|---|
+| 1 | `pose_shoulder_drop_neck_lift` | pose_hold | 4 | slow, medium | 肩膀下沉 + 颈部伸展 |
+| 2 | `pose_chest_open_bilateral` | pose_hold | 4 | slow, medium | 胸部打开，双侧 |
+| 3 | `pose_shoulder_lift_release` | pose_hold | 4 | slow, medium | 肩膀上提 + 释放 |
+| 4 | `pose_elbow_overhead_reach` | pose_hold | 4 | slow, medium | 手肘过头伸展 |
+| 5 | `motion_arm_diagonal_up_sweep` | hand_motion | 2 | medium, fast | 对角线向上扫臂 |
+| 6 | `motion_arm_alternate_up_down` | hand_motion | 2 | medium, fast | 交替上下摆臂 |
+| 7 | `motion_arm_vertical_alternate` | hand_motion | 2 | medium, fast | 垂直前方交替 |
+| 8 | `motion_arm_accented_circular_loop` | hand_motion | 2 | medium, fast | 重音圆形节奏循环 |
+| 9 | `neutral_reset_breath` | neutral | 2 | slow, medium, fast | 呼吸重置 |
+| 10 | `neutral_shoulder_release` | neutral | 2 | slow, medium, fast | 肩膀被动释放 |
+
+### 数据模型（Firestore Document）
+
+```json
+{
+  "id": "pose_shoulder_drop_neck_lift",
+  "type": "pose_hold",
+  "beats_required": 4,
+  "tempo_profile": ["slow", "medium"],
+  "body_constraints": {
+    "posture": "seated",
+    "hand_out_of_frame_allowed": true,
+    "max_arm_height": "unlimited"
+  },
+  "primary_anchors": ["shoulder", "elbow"],
+  "intent": "Shoulders sink downward while the head gently elongates upward. No tilt, no rotation.",
+  "verification_notes": [
+    "Head stays centered",
+    "No side bending",
+    "Calm, decompressive feeling"
+  ],
+  "status": "active",
+  "version": 1
+}
+```
+
+### 关键设计决策
+
+#### 1. `intent` + `verification_notes` 替代 `description`
+
+**决定**：不用单个 `description` 字符串，改为结构化的 `intent`（字符串）+ `verification_notes`（数组）。
+
+**原因**：
+- `intent` → Rive 动画选择、AI Summary、Debug 用
+- `verification_notes` → Phase Engine 验证 checklist、QA 对照、AI 评估
+- 低成本、高收益的结构化设计
+
+#### 2. `primary_anchors` 分组简写
+
+**决定**：模板层用分组名（`shoulder`, `elbow`, `hand`），Flow 生成时展开为具体追踪点（`left_shoulder`, `right_shoulder` 等）。
+
+**原因**：
+- V1 的 10 个 Phase 全是**双侧对称**动作，不需要区分左右
+- 模板更简洁可读
+- 展开逻辑在 Flow 生成服务中，单一职责
+- 向后兼容：将来加单侧动作可以直接用 `left_hand` 等值，与 `hand` 共存
+
+**层级关系**：
+```
+模板层 (Firestore)          运行时层 (Phase Engine)
+"shoulder"            →     ["left_shoulder", "right_shoulder"]
+"elbow"               →     ["left_elbow", "right_elbow"]
+"hand"                →     ["left_hand", "right_hand"]
+```
+
+### 实施状态
+
+- [x] 10 个 Phase 内容设计完成
+- [x] 数据模型字段确认
+- [x] 设计决策记录
+- [ ] 写入 Firestore ⬅️ 下一步
+- [ ] Flow 生成服务（从 Phase 库组合）
+- [ ] 替换硬编码的 `services/flow.py`
 
 ---
 
@@ -232,10 +328,19 @@
 
 | 按键 | 功能 |
 |------|------|
-| Enter / Space | 暂停/继续 |
-| ArrowLeft | 返回 Avatar 页 |
-| ArrowRight | 提前结束 |
-| S | 切换歌曲 |
+| 页面/状态 | ArrowLeft | ArrowRight | Enter/Space | S |
+|-----------|-----------|------------|-------------|---|
+| P1 Welcome | — | — | START | — |
+| P2 idle | Generate | — | Generate | — |
+| P2 generating | — | — | — | — |
+| P2 previewing | Regenerate | Confirm Avatar | Confirm Avatar | — |
+| P2 selecting-song | Prev Song | Next Song | Lock & Start | — |
+| P3 Playing | Return P2 (c) | End early (c) | Pause | Change song (c) |
+| P3 Paused | Return P2 (c) | End early (c) | Resume | Change song (c) |
+| P3 Dialog | Cancel | — | Confirm | — |
+| P4 Result | Repeat | Exit | New Song | — |
+
+*(c) = 需要确认对话框*
 
 ### 技术细节
 
@@ -248,7 +353,7 @@
 
 #### 手势检测
 - 指尖估算：wrist + (wrist - elbow) × 0.4
-- Dwell time：300ms (GestureButton), 200ms (GoBubble)
+- Dwell time：400ms (GestureButton), 200ms (GoBubble)
 - Debounce：2000ms
 - Sticky hover：200ms 宽限期
 - Padding：15% 增大触发区域
@@ -257,32 +362,33 @@
 
 ## 下一步计划
 
-### 🔴 V1 Stable Demo（当前优先）
-目标：**一次可靠的完整会话 demo**
+### 🔴 Phase 模板库 + Flow 生成（当前优先）
+目标：**Phase 存入 Firestore，Flow 动态生成替换硬编码**
 
 - [x] 添加暂停视觉覆盖层 ✅ (2026-02-06)
 - [x] 添加摄像头错误重试按钮 ✅ (2026-02-06)
-- [ ] **卡通形象动作引导系统** ⬅️ 当前任务
+- [x] 全页面键盘映射 ✅ (2026-02-09)
+- [x] Avatar 生成失败 UI ✅ (2026-02-09)
+- [x] UX_SPEC.md v1.1 ✅ (2026-02-09)
+- [x] Phase 模板设计（10 个） ✅ (2026-02-09)
+- [ ] **Phase 模板写入 Firestore** ⬅️ 当前任务
+- [ ] Flow 动态生成服务
+- [ ] 替换硬编码 `services/flow.py`
 - [ ] 端到端测试完整流程
 
-### Rive — Phase 1（最小可用动画）
+### Rive 动画（卡通形象动作引导）
 - [ ] 创建基础 Rive 动画文件
 - [ ] 状态机设计（idle/pose/transition）
 - [ ] 与 Page 1/2/3 集成
 
-### Step 9：手机遥控器（V1.1）
+### Avatar 生成 API 集成
+- [ ] 前后端连接
+- [ ] 实时叠加显示
+
+### 手机遥控器（V1.1）
 - [ ] WebSocket 服务
 - [ ] 手机端 PWA 页面
 - [ ] QR 码配对
-
-### Step 10：Avatar Reference
-- [ ] Avatar 生成 API 集成
-- [ ] 实时叠加显示
-
-### Rive — Phase 2（深化动画）
-- [ ] 情绪表情
-- [ ] 节奏动画
-- [ ] 成就感反馈
 
 ---
 
@@ -320,4 +426,4 @@ cd frontend && npm run dev
 
 ---
 
-*最后更新: 2026-02-06 (架构实现状态分析添加)*
+*最后更新: 2026-02-09 (键盘映射、失败UI、UX_SPEC v1.1、Phase模板库设计)*

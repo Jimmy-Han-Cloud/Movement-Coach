@@ -1,584 +1,743 @@
-# Movement Coach - 完整工作流程
+# Movement Coach - Complete Workflow
 
-> 此文档是项目的核心参考文档，包含：
-> - PRD 核心原则（不可变）
-> - 动作安全约束
-> - 完整用户流程
-> - 技术实现指南
-> - 关键决策记录
+> This document is the core reference for the project, covering:
+> - PRD Core Principles (immutable)
+> - Movement Safety Constraints
+> - Complete User Flow (aligned with UX_SPEC.md v1.1)
+> - Technical Implementation Guide
+> - Key Decision Records
 >
-> Last Updated: 2026-02-06
+> Last Updated: 2026-02-09
 
 ---
 
-## Part 1: 核心原则（PRD v1 Immutable）
+## Part 1: Core Principles (PRD v1 Immutable)
 
-### 产品定义
-- **类型**：浏览器端、摄像头驱动、音乐同步的引导式运动体验
-- **用户**：久坐电脑用户
-- **时长**：3-5 分钟（全局固定）
-- **目标**：颈部、肩膀、上背、手臂的有意义运动
-- **原则**：无评分、无失败、无判断
+### Product Definition
+- **Type:** Browser-based, camera-driven, music-synchronized guided movement experience
+- **Users:** Sedentary computer users
+- **Duration:** 3-5 minutes per song
+- **Goal:** Meaningful movement of neck, shoulders, upper back, and arms
+- **Principles:** No scoring, no failure, no judgment
 
-### 7 个追踪点（不可变）
+### 7 Tracked Points (Immutable)
 
-| # | 名称 | 说明 |
-|---|------|------|
-| 1 | Head | 前额中心 |
-| 2 | Left Shoulder | 左肩 |
-| 3 | Right Shoulder | 右肩 |
-| 4 | Left Elbow | 左肘 |
-| 5 | Right Elbow | 右肘 |
-| 6 | Left Hand | 左手腕（估算手掌位置） |
-| 7 | Right Hand | 右手腕（估算手掌位置） |
+| # | Name | Description |
+|---|------|-------------|
+| 1 | Head | Forehead center |
+| 2 | Left Shoulder | Left shoulder |
+| 3 | Right Shoulder | Right shoulder |
+| 4 | Left Elbow | Left elbow |
+| 5 | Right Elbow | Right elbow |
+| 6 | Left Hand | Left wrist (estimates palm position) |
+| 7 | Right Hand | Right wrist (estimates palm position) |
 
-**不可变**：没有任何 Phase、Flow 或功能可以减少或替换这些点。
+**Immutable:** No Phase, Flow, or feature may reduce or replace these points.
 
-### 动作语义（不可变）
+### Action Semantics (Immutable)
 
-| 类型 | 应用于 | 验证规则 |
-|------|--------|---------|
-| **Pose Hold** | Head, Shoulders, Elbows | 到达目标位置 + 保持时间（1.5-3秒） |
-| **Hand Motion** | Both Hands | 起止位置对齐 + 方向正确 + 节奏匹配 |
+| Type | Applies To | Validation Rule |
+|------|-----------|-----------------|
+| **Pose Hold** | Head, Shoulders, Elbows | Reach target position + hold time (1.5-3s) |
+| **Hand Motion** | Both Hands | Start/end position alignment + correct direction + rhythm match |
 
-**关键**：手肘必须参与，不允许仅手腕运动。
+**Key:** Elbows must participate; wrist-only movement is not allowed.
 
-### Phase 模型（不可变结构）
+### Phase Model (Immutable Structure)
 
-系统由显式 Phase 组成：
-- Neutral / Calibration phases（校准）
-- Pose Hold phases（姿势保持）
-- Hand Motion phases（手部运动）
+The system consists of explicit Phases:
+- Neutral / Calibration phases
+- Pose Hold phases
+- Hand Motion phases
 
-Phase 顺序在每个 Flow 中固定，个性化不会改变 Phase 语义。
+Phase order is fixed within each Flow. Personalization does not change Phase semantics.
 
-### 安全约束（不可个性化）
+### Safety Constraints (Not Personalizable)
 
-| 约束 | 说明 |
-|------|------|
-| 最小保持时间 | Pose Hold 不能低于安全阈值 |
-| 最小手肘参与 | 手部运动必须有手肘配合 |
-| 肩部打开 | 每次会话至少一个有效的肩部打开动作 |
+| Constraint | Description |
+|------------|-------------|
+| Minimum hold time | Pose Hold cannot go below safety threshold |
+| Minimum elbow participation | Hand motion must include elbow engagement |
+| Shoulder opening | At least one effective shoulder opening per session |
 
-### 个性化范围
+### Personalization Scope
 
-**可调整（逐步、有界）：**
-- 姿势保持时长
-- 位置容差
-- 手肘参与阈值
-- 手部运动节奏
+**Adjustable (gradual, bounded):**
+- Pose hold duration
+- Positional tolerance
+- Elbow participation threshold
+- Hand motion tempo
 
-**不可调整：**
-- 会话总时长
-- Phase 顺序
-- 动作语义类型
-- 追踪点数量
+**Not adjustable:**
+- Total session duration
+- Phase order
+- Action semantic types
+- Number of tracked points
 
-### 智能逻辑（仅授权）
+### Smart Logic (Authorized Only)
 
-| 逻辑 | 状态 | 说明 |
-|------|------|------|
-| ① 意图检测 | ✅ 授权 | 检测用户是否向目标移动，仅影响反馈语气 |
-| ② 微调时间 | ✅ 授权 | Phase 时长可调 ±0.5s，不跳过/重排 Phase |
-| 其他 | ❌ 禁止 | V1 不存在其他智能逻辑 |
-
----
-
-## Part 2: 动作安全约束
-
-### 核心哲学
-
-1. **动作是受约束的，不是发明的**
-   - 所有动作来自预定义动作库
-   - 随机性是组合性的，不是生成性的
-
-2. **控制 > 幅度**
-   - 优先：控制参与、关节参与、结构完整
-   - 不追求：大幅度、夸张角度、视觉戏剧化
-
-### 全局安全约束
-
-| 约束 | 说明 |
-|------|------|
-| 无弹道运动 | 无突然加速/减速，无甩动/抽动 |
-| 颈部保护 | 头部运动缓慢、有意识，无快速旋转 |
-| 肩肘必须参与 | 手部运动必须有肩肘配合 |
-
-### 时间原则
-
-| 原则 | 说明 |
-|------|------|
-| 保持时间必须 | 静态位置必须有意到达并保持 |
-| 动静交替 | 有效序列在 Pose Hold 和 Hand Motion 间交替 |
-| 节奏不强制 | 音乐节奏引导但不强制，安全优先 |
-
-### 评估哲学
-
-| 评估 | 说明 |
-|------|------|
-| 参与 > 精确 | 评估关节是否有意义地参与，不评估精确角度 |
-| 努力独立于成功 | 正在努力但未到达 ≠ 没有运动 |
-
-### 系统明确避免
-
-- ML 动作分类用于实时验证
-- 竞争性评分或排名
-- 二元通过/失败判断
-- 强制对称
-- 高速或大幅度编舞
+| Logic | Status | Description |
+|-------|--------|-------------|
+| 1. Intent Detection | ✅ Authorized | Detects if user is moving toward target; affects feedback tone only |
+| 2. Time Fine-Tuning | ✅ Authorized | Phase duration adjustable ±0.5s; no skipping/reordering Phases |
+| Other | ❌ Prohibited | No other smart logic exists in V1 |
 
 ---
 
-## Part 3: 产品概述
+## Part 2: Movement Safety Constraints
 
-**Movement Coach** - 浏览器端、摄像头驱动、音乐同步的引导式运动体验。
+### Core Philosophy
 
-- 目标用户：久坐电脑用户
-- 会话时长：3-5 分钟
-- 核心价值：通过卡通形象引导用户完成颈部、肩膀、上背和手臂的运动
+1. **Movements are constrained, not invented**
+   - All movements come from a predefined movement library
+   - Randomness is compositional, not generative
+
+2. **Control > Amplitude**
+   - Priority: controlled engagement, joint participation, structural integrity
+   - Not pursued: large amplitude, exaggerated angles, visual dramatization
+
+### Global Safety Constraints
+
+| Constraint | Description |
+|------------|-------------|
+| No ballistic movement | No sudden acceleration/deceleration, no flinging/jerking |
+| Neck protection | Head movement is slow and intentional, no rapid rotation |
+| Shoulder-elbow must participate | Hand movement must include shoulder-elbow engagement |
+
+### Time Principles
+
+| Principle | Description |
+|-----------|-------------|
+| Hold time required | Static positions must be intentionally reached and held |
+| Dynamic-static alternation | Effective sequences alternate between Pose Hold and Hand Motion |
+| Rhythm not enforced | Music rhythm guides but does not force; safety takes priority |
+
+### Assessment Philosophy
+
+| Assessment | Description |
+|------------|-------------|
+| Engagement > Precision | Evaluate whether joints meaningfully participate, not precise angles |
+| Effort independent of success | Trying but not reaching ≠ no movement |
+
+### System Explicitly Avoids
+
+- ML-based action classification for real-time validation
+- Competitive scoring or rankings
+- Binary pass/fail judgments
+- Forced symmetry
+- High-speed or large-amplitude choreography
 
 ---
 
-## 页面流程总览
+## Part 3: User Flow (Aligned with UX_SPEC v1.1)
+
+> This section stays consistent with UX_SPEC.md v1.1. UX_SPEC.md is the authoritative document
+> for the UX layer; this section is the developer-facing workflow perspective.
+
+### Page Architecture
+
+| Page | Name | Route | Purpose |
+|------|------|-------|---------|
+| P1 | Welcome | `/` | Onboarding, trust, remote pairing |
+| P2 | Avatar Setup | `/avatar` | Generate avatar, select song, launch game |
+| P3 | Game | `/game?songId=xxx` | Main movement experience (music + Flow) |
+| P4 | Result | Modal on `/game` | Session summary and next actions |
+
+### Page Flow Overview
 
 ```
 Page 1 (Welcome)
-    ↓ 点击 START 或遥控器确认
+    ↓ Click START / Keyboard Enter / Remote confirm
 Page 2 (Avatar Setup)
-    ├── 生成阶段：Generate → 卡通形象预览 → Confirm
-    └── 选歌阶段：选歌 → 触发气泡 → 系统生成 Flow
+    ├── idle → generating → previewing → Confirm Avatar
+    └── selecting-song → Pick song → Go Bubble → locked
+    ↓ Navigate to /game?songId=xxx
+Page 3 (Game) — Starts Playing immediately (no Idle state)
+    ├── Avatar demonstrates Flow actions (pending Rive)
+    ├── User follows; system tracks 7 body points
+    ├── Playing ↔ Paused (Enter/Space)
+    ├── Playing/Paused → Switching → Playing (song change)
+    └── Playing/Paused → Finished (song ends / early end)
     ↓
-Page 3 (Game)
-    ├── 卡通形象根据 Flow 做动作
-    ├── 用户跟随，系统检测 7 个追踪点
-    └── 完成或提前结束
-    ↓
-Page 4 (Result)
-    ├── AI 生成反馈
-    └── 重复 / 新歌曲 / 退出
+Page 4 (Result Modal)
+    ├── Repeat → P3 Playing (same song)
+    ├── New Song → P2
+    └── Exit → P1
 ```
 
 ---
 
-## Page 1 - Welcome（欢迎页）
+## Page 1 - Welcome
 
-### 功能
-- 展示产品信息和介绍
-- 显示二维码供用户扫描连接手机遥控器
-- START 按钮进入下一页
+### Layout (Left-Center-Right)
 
-### 用户操作
-| 操作方式 | 动作 |
-|---------|------|
-| 鼠标 | 点击 START 按钮 |
-| 手机遥控器 | 确认键 |
-
-### 进入条件
-- 点击后直接进入 Page 2
-
----
-
-## Page 2 - Avatar Setup（形象设置）
-
-### 阶段 1：生成卡通形象
-
-#### 触发生成
-| 操作方式 | 动作 |
-|---------|------|
-| 鼠标 | 点击 Generate 按钮 |
-| 手机遥控器 | 左键 |
-| 手势 | 手停留在左键区域 300ms |
-
-#### 生成流程
-1. 系统抓拍用户照片
-2. 发送到后端生成卡通形象
-3. 返回卡通形象显示在屏幕上
-
-#### 卡通形象特征
-| 属性 | 值 |
-|------|-----|
-| 透明度 | 90% |
-| 头部比例 | 比真实大 10%（显得可爱） |
-| 表情 | 喜怒哀乐轮流切换 |
-| Pose | 轮流指向左键、右键位置（指示用户操作） |
-
-#### 数据存储
-- 后端**不保存**用户照片
-- 后端**不保存**卡通形象
-- 用户退出系统后形象丢失
-
-#### 不满意可重新生成
-三种方式触发 Regenerate（同 Generate）
-
-#### 确认形象
-| 操作方式 | 动作 |
-|---------|------|
-| 鼠标 | 点击 Confirm Avatar 按钮 |
-| 手机遥控器 | 右键 |
-| 手势 | 手停留在右键区域 300ms |
-
----
-
-### 阶段 2：选择歌曲
-
-#### 界面变化
-- 卡通形象锁定（不可修改）
-- 下方出现音乐选择栏
-- 右侧出现 Go 气泡
-
-#### 卡通形象行为（选歌阶段）
-| 属性 | 值 |
-|------|-----|
-| Pose | 轮流指向**左键 → 右键 → 气泡**（3 个位置循环） |
-| 表情 | 喜怒哀乐轮流切换 |
-| 说明 | 这是预设 Pose，不是跟随 Flow |
-
-#### 选歌操作
-| 操作方式 | 左键 | 右键 |
-|---------|------|------|
-| 鼠标 | 上一首 | 下一首 |
-| 手机遥控器 | 上一首 | 下一首 |
-| 手势 | 手停留触发 | 手停留触发 |
-
-#### 歌曲预览
-- 切换歌曲时可**实时 preview 音乐**
-- 此时**没有 Flow/Phase**，只是音乐预览
-
-#### 手机遥控器选歌键
-- 打开下拉菜单选歌
-- 功能与屏幕选歌栏类似
-
-#### 确认歌曲（触发气泡）
-| 操作方式 | 动作 |
-|---------|------|
-| 鼠标 | 点击 Go 气泡 |
-| 手机遥控器 | 确认键 |
-| 手势 | 手停留在气泡区域 200ms |
-
-#### Flow 生成（后台）
-1. 系统分析音乐特征（节奏、时长）
-2. 从数据库拉取 Phase 片段
-3. 根据节奏和时长编排成完整 Flow
-4. 允许消耗一点时间生成
-5. 完成后进入 Page 3
-
----
-
-## Page 3 - Game（游戏）
-
-### 卡通形象引导
-
-#### 卡通形象特征
-| 属性 | 值 |
-|------|-----|
-| 透明度 | 80% |
-| 大小 | 与真人基本一致 |
-| 头部比例 | 比真实略大（显得可爱） |
-| 位置 | 与真人重叠 |
-
-#### 动作引导
-- 卡通形象根据 Flow 信息做动作
-- 用户跟随卡通形象的动作
-- 系统检测用户是否完成动作
-
----
-
-### 动作检测
-
-#### 7 个追踪点
-| 编号 | 名称 | 说明 |
-|------|------|------|
-| 1 | Head | 前额中心 |
-| 2 | Left Shoulder | 左肩 |
-| 3 | Right Shoulder | 右肩 |
-| 4 | Left Elbow | 左肘 |
-| 5 | Right Elbow | 右肘 |
-| 6 | Left Hand | 左手掌估算点 |
-| 7 | Right Hand | 右手掌估算点 |
-
-#### 手掌位置估算
-```
-手掌位置 = 手腕 + (手腕 - 手肘) × 0.4
-```
-- 手腕向手肘反方向延伸
-- 约一个手掌的长度
-
-#### Phase 包含信息
-- 7 个点的目标位置
-- 保持时间（Pose Hold）
-- 手部运动轨迹（Hand Motion）
-
----
-
-### 用户控制
-
-#### 屏幕控制
-| 操作 | 效果 | 需要确认 |
-|------|------|---------|
-| 鼠标点击后退 | 刷新 Page 2，可重新生成形象 | - |
-
-#### 手机遥控器
-| 按键 | 功能 | 需要确认 |
-|------|------|---------|
-| 左键 | 结束游戏 → 返回 Page 2 选歌 | ✅ 弹窗确认 |
-| 选歌键 | 同左键 | ✅ 弹窗确认 |
-| 确认键 | 暂停 / 播放 | ❌ 直接执行 |
-| 右键 | 结束游戏 → 进入 Page 4 | ✅ 弹窗确认 |
-
-#### 键盘映射（模拟遥控器）
-| 按键 | 功能 |
-|------|------|
-| ArrowLeft | 返回 Page 2（需确认） |
-| ArrowRight | 结束游戏到 Page 4（需确认） |
-| Enter / Space | 暂停 / 播放 |
-| S | 切换歌曲（需确认） |
-
----
-
-### 游戏结束条件
-1. 歌曲播放完毕（自动）
-2. 用户按右键结束（手动）
-
----
-
-## Page 4 - Result（结果页）
-
-### 内容
-- 完成百分比显示
-- AI 生成简短反馈
-- 三个操作按钮
-
-### 按钮功能
-| 位置 | 按钮 | 功能 |
-|------|------|------|
-| 左 | Repeat | 重复当前歌曲 → 快速回到 Page 3 |
-| 中 | New Song | 重新选歌 → 返回 Page 2 |
-| 右 | Exit | 退出 → 返回 Page 1 |
-
-### 手机遥控器
-| 按键 | 对应按钮 |
+| Area | Content |
 |------|---------|
-| 左键 | Repeat（重复） |
-| 确认键 | New Song（新歌曲） |
-| 右键 | Exit（退出） |
-| 选歌键 | 无功能（Page 4 只有 3 个按钮） |
+| Left Panel | Product info, usage summary, trust framing |
+| Center Panel | Cartoon animation demo (placeholder) + START button |
+| Right Panel | QR code pairing + remote status + legal/privacy (collapsed) |
+
+### User Actions
+
+| Input | Action |
+|-------|--------|
+| Mouse | Click START button |
+| Keyboard | Enter / Space |
+| Remote | Confirm button |
+
+### Entry Condition
+- Navigates directly to Page 2 on action
 
 ---
 
-## 技术架构
+## Page 2 - Avatar Setup
 
-### 卡通形象系统
+### State Machine (5 States)
 
-#### Page 2 行为
-| 阶段 | Pose | 表情 |
-|------|------|------|
-| 生成预览 | 指向左键、右键（交替） | 喜怒哀乐切换 |
-| 选歌阶段 | 指向左键、右键、气泡（三位置循环） | 喜怒哀乐切换 |
+```
+idle → generating → previewing → selecting-song → locked → navigate to P3
+                ↑                        |
+                └── (on failure) ────────┘
+```
 
-#### Page 3 行为
-| 属性 | 值 |
-|------|-----|
-| Pose | 根据 Flow 的 Phase 信息做动作 |
-| 表情 | 根据用户表现反馈（待定） |
+| State | Left Button | Right Button | Extra UI |
+|-------|-------------|--------------|----------|
+| idle | Generate | Confirm (disabled) | Tip Box visible; StatusBadge hidden |
+| generating | Generate (disabled) | Confirm (disabled) | StatusBadge: "Generating..." |
+| previewing | Regenerate | Confirm Avatar | StatusBadge: "Previewing" |
+| selecting-song | Prev Song (◀) | Next Song (▶) | SongCarousel + GoBubble |
+| locked | ◀ (disabled) | ▶ (disabled) | StatusBadge: "Locked" |
 
-### Flow 生成系统
+**On generation failure:** Red StatusBadge "Generation failed. Retry." appears, state returns to idle, Generate button remains available.
 
-#### 输入
-- 歌曲音频特征（节奏、时长、节拍）
+### Phase 1: Generate Avatar
 
-#### 处理
-1. 分析音乐特征
-2. 从 Phase 片段库匹配
-3. 根据节奏编排顺序
-4. 生成完整 Flow
+#### Trigger Generation
+| Input | Action |
+|-------|--------|
+| Mouse | Click Generate button |
+| Keyboard | ArrowLeft / Enter / Space |
+| Gesture | Hand hovers on left button area for 400ms |
 
-#### 输出
-- Flow JSON（包含多个 Phase）
-- 每个 Phase 包含：位置、时间、轨迹
+#### Generation Flow
+1. System captures user photo
+2. Sends to backend for cartoon avatar generation
+3. Returns avatar and displays on screen
 
-### Phase 类型
+#### Avatar Properties
+| Property | Value |
+|----------|-------|
+| Opacity | 90% (`--opacity-avatar-setup`) |
+| Head proportion | Visual mesh 1.15-1.25x (not skeletal) |
+| Neck joint | Fixed; no dynamic head scaling during Flow |
 
-| 类型 | 追踪点 | 验证规则 |
-|------|--------|---------|
-| Neutral | Head, Shoulders, Elbows | 无验证，记录基线 |
-| Pose Hold | Head, Shoulders, Elbows | 到达位置 + 保持时间 |
-| Hand Motion | Hands, Elbows | 起止位置 + 方向 + 节奏 |
+#### Avatar Content Policy
+- No revealing or inappropriate clothing
+- Neutral, friendly appearance only
 
----
+#### Data Storage
+- Backend does **not** save user photos
+- Backend does **not** save avatar images
+- Avatar is lost when user exits the system
 
-## 手机遥控器按键总览
-
-| 页面 | 左键 | 选歌键 | 确认键 | 右键 |
-|------|------|--------|--------|------|
-| Page 1 | - | - | 进入 Page 2 | - |
-| Page 2 生成 | Generate | - | - | Confirm Avatar |
-| Page 2 选歌 | 上一首 | 下拉选歌 | 触发气泡 | 下一首 |
-| Page 3 | 返回 Page 2 | 返回 Page 2 | 暂停/播放 | 结束到 Page 4 |
-| Page 4 | Repeat | 无功能 | New Song | Exit |
-
----
-
-## 设计原则
-
-### 安全约束（不可个性化）
-- 最小姿势保持时间
-- 最小手肘参与阈值
-- 每次会话至少一个有效的肩部打开动作
-
-### 可个性化（逐步调整）
-- 姿势保持时长
-- 位置容差
-- 手肘参与阈值
-- 手部运动节奏
-
-### 不可个性化
-- 会话总时长
-- Phase 顺序
-- 运动语义类型
-- 追踪点（始终 7 个）
+#### Confirm Avatar
+| Input | Action |
+|-------|--------|
+| Mouse | Click Confirm Avatar button |
+| Keyboard | ArrowRight / Enter / Space |
+| Gesture | Hand hovers on right button area for 400ms |
 
 ---
 
-## 智能逻辑（仅授权）
+### Phase 2: Select Song
 
-### ✅ Smart Logic ① - 意图检测
-- 检测用户是否正在向目标移动
-- 仅影响反馈语气
-- 不影响成功判定、计时或验证
+#### UI Changes
+- Avatar locked (no further modification)
+- SongCarousel appears (5 preset tracks, circular navigation)
+- Go Bubble appears on right side (150px diameter)
+- Bubble burst animation on trigger
 
-### ✅ Smart Logic ② - 微调时间
-- Phase 时长可调整 ±0.5 秒
-- 仅在 Phase 内
-- 不跳过或重排 Phase
-- 不违反安全约束
+#### Song Navigation
+| Input | Previous | Next |
+|-------|----------|------|
+| Mouse | Click ◀ button | Click ▶ button |
+| Keyboard | ArrowLeft | ArrowRight |
+| Gesture | Hand hovers on ◀ area for 400ms | Hand hovers on ▶ area for 400ms |
 
-### ❌ 其他智能逻辑
-- V1 不存在其他智能逻辑
+#### Confirm Song (Go Bubble)
+| Input | Action |
+|-------|--------|
+| Mouse | Click Go Bubble |
+| Keyboard | Enter / Space |
+| Gesture | Hand hovers on bubble area for 200ms |
+
+#### Flow Generation (Background)
+1. System analyzes song characteristics (tempo, duration, beats)
+2. Pulls Phase templates from Firestore `phase_templates` collection
+3. Arranges into a complete Flow based on tempo and duration
+4. Navigates to Page 3 on completion
+
+### Tip Box
+- Top-left floating
+- Auto-dismisses after first successful generation
+
+### Gesture Trigger (P2)
+- Trigger point: fingertip estimation (`wrist + (wrist - elbow) * 0.4`)
+- GestureButton dwell time: 400ms
+- GoBubble dwell time: 200ms
+- Debounce: 2s per element
+- Sticky hover: 200ms grace period
+- Padding: 15% enlarged hit area
+- Visual feedback: glow ring + scale up (110%) on hover, scale down pulse (95%) on trigger
+
+### Keyboard Mapping (P2)
+
+| State | ArrowLeft | ArrowRight | Enter / Space |
+|-------|-----------|------------|---------------|
+| idle | Generate | — | Generate |
+| generating | — | — | — |
+| previewing | Regenerate | Confirm Avatar | Confirm Avatar |
+| selecting-song | Prev Song (◀) | Next Song (▶) | Lock & Start |
+| locked | — | — | — |
+
+**Design principle:** ArrowLeft/Right follow spatial position (left/right button on screen). Enter/Space always triggers the primary forward action of the current state.
 
 ---
 
-## Rive 动画系统实施指南
+## Page 3 - Game
 
-> 此部分记录卡通形象动作引导系统的实现计划（缺口 1）
+### State Machine (4 States, No Idle)
+
+Page 3 has **no Idle state**. The game starts Playing immediately on entry.
+Song selection and Go Bubble interaction happen on Page 2.
+
+| State | Description |
+|-------|-------------|
+| Playing | Flow active, avatar demonstrates current Phase, progress bar advances |
+| Paused | Music paused, Flow paused, awaiting resume |
+| Switching | Transitional state, displays "Switching...", all inputs disabled |
+| Finished | Session complete, Result Modal shown |
+
+### Avatar Guidance
+
+#### Avatar Properties
+| Property | Value |
+|----------|-------|
+| Opacity | 80% (`--opacity-avatar-game`) |
+| Size | Same scale as user body |
+| Position | Centered and aligned with user |
+| Dynamic | No opacity or scale changes during active Flow |
+
+#### Movement Guidance
+- Avatar performs actions based on Flow Phase information (pending Rive implementation)
+- User follows the avatar's movements
+- System detects whether user completes the movements
+
+### UI Elements
+
+| Element | Position | Description |
+|---------|----------|-------------|
+| Song Display | Top-left | Always visible, read-only; shows locked song name + artist; progress bar shows overall Flow completion %; no dropdown, no song switching UI |
+| Game HUD | Top-right | Current state + elapsed time / total duration |
+| Pause Overlay | Fullscreen center | Semi-transparent black (40%) + pause icon (two vertical bars) + "Paused" text + "Press Enter or remote confirm to resume" hint |
+| Switching Overlay | Fullscreen center | "Switching..." + all inputs disabled |
+
+**Camera feed dimming:** Camera feed is dimmed during Pause, Dialog, and Result states.
+
+### Motion Detection
+
+#### Palm Position Estimation
+```
+palm position = wrist + (wrist - elbow) × 0.4
+```
+
+### User Actions
+
+| Action | Trigger | Result |
+|--------|---------|--------|
+| Pause/Resume | Enter / Space | Toggle pause |
+| Change Song | S key (+ confirm dialog) | End Flow → Switching → Playing |
+| Return to P2 | ArrowLeft (+ confirm dialog) | Navigate to Avatar Setup |
+| End Early | ArrowRight (+ confirm dialog) | Navigate to Result |
+
+### Keyboard Mapping (P3)
+
+| State | ArrowLeft | ArrowRight | Enter / Space | S |
+|-------|-----------|------------|---------------|---|
+| Playing | Return to P2 (c) | End early (c) | Pause | Change song (c) |
+| Paused | Return to P2 (c) | End early (c) | Resume | Change song (c) |
+| Switching | — | — | — | — |
+| Dialog | Cancel | — | Confirm | — |
+| Result | Repeat | Exit | New Song | — |
+
+*(c) = requires confirmation dialog*
+
+### Confirmation Dialogs (3 Types)
+
+| Type | Title | Message | Confirm | Cancel |
+|------|-------|---------|---------|--------|
+| return-to-avatar | "Return to avatar setup?" | "Your current progress will be lost." | "Return" | "Cancel" |
+| end-session | "End session now?" | "Your progress will be saved." | "End" | "Cancel" |
+| change-song | "Switch song?" | "The current session will end." | "Switch" | "Cancel" |
+
+**Dialog keyboard:** Enter/Space = Confirm, ArrowLeft/Escape = Cancel
+
+#### Dialog General Behavior Rules
+- Dialogs are modal and centered on screen
+- Underlying interaction is paused
+- Camera feed remains visible but dimmed (overlay opacity 60%, `--opacity-overlay-dim`)
+- Gesture input is disabled
+- Mouse click and keyboard/remote input accepted
+- Dialogs require an explicit confirm or cancel action
+- Dialog copy is short, clear, and non-technical
+
+#### Dialog Priority and Input Handling
+- Confirmation dialogs override all other UI layers (z-index: `--z-dialog`)
+- No other UI updates occur while dialog is visible
+- All state transitions initiated by dialogs are atomic
+- Game page keyboard handler defers to ConfirmDialog's own handler (`if (activeDialog) return`)
+
+#### Copy Tone Guidelines (V1)
+- Supportive, neutral, and respectful
+- Avoid technical terms
+- Avoid blame or error framing
+- Always state the consequence clearly
+
+### Game End Conditions
+1. Song duration elapsed (automatic)
+2. User presses ArrowRight to end early (manual, with confirmation)
+
+---
+
+## Page 4 - Result
+
+Result is a modal overlay on the Game page (not a separate route).
+
+### Display
+- Semi-transparent overlay
+- Slides down automatically (dialog-enter animation)
+- Does not fully obscure camera
+
+### Content
+- Circular progress visualization + completion percentage
+- Encouragement message
+- Three action buttons
+
+### Encouragement Brackets
+
+| Completion % | Tone | Message |
+|-------------|------|---------|
+| 90-100% | Celebration | "Amazing! You nailed it!" |
+| 70-89% | Encouragement | "Great job! Keep it up!" |
+| 50-69% | Motivation | "Good effort! You're improving!" |
+| < 50% | Supportive | "Every step counts. Try again!" |
+
+### Button Functions
+| Position | Button | Function |
+|----------|--------|----------|
+| Left | Repeat | Repeat current song → stay on P3 |
+| Center | New Song | Re-select song → return to P2 |
+| Right | Exit | Exit → return to P1 |
+
+### Keyboard Mapping (P4 Result)
+
+| Key | Action |
+|-----|--------|
+| ArrowLeft | Repeat |
+| Enter / Space | New Song |
+| ArrowRight | Exit |
+
+---
+
+## Full Keyboard Mapping Summary
+
+| Page / State | ArrowLeft | ArrowRight | Enter / Space | S |
+|-------------|-----------|------------|---------------|---|
+| **P1** Welcome | — | — | START | — |
+| **P2** idle | Generate | — | Generate | — |
+| **P2** generating | — | — | — | — |
+| **P2** previewing | Regenerate | Confirm Avatar | Confirm Avatar | — |
+| **P2** selecting-song | Prev Song (◀) | Next Song (▶) | Lock & Start | — |
+| **P2** locked | — | — | — | — |
+| **P3** Playing | Return to P2 (c) | End early (c) | Pause | Change song (c) |
+| **P3** Paused | Return to P2 (c) | End early (c) | Resume | Change song (c) |
+| **P3** Switching | — | — | — | — |
+| **P3** Dialog | Cancel | — | Confirm | — |
+| **P4** Result | Repeat | Exit | New Song | — |
+
+*(c) = requires confirmation dialog*
+
+**Design principles:**
+- **ArrowLeft / ArrowRight** = spatial mapping (corresponds to on-screen left/right button positions)
+- **Enter / Space** = primary forward action of the current context
+- **S** = song switch shortcut (P3 only, simulates remote Switch button)
+- **Escape** = cancel (in dialogs, equivalent to ArrowLeft)
+
+---
+
+## Mobile Remote Controller Summary
+
+> Remote is not implemented in V1. Keyboard mapping simulates remote for development and demo.
+
+| Page | < Left | Confirm | > Right | Switch |
+|------|--------|---------|---------|--------|
+| P1 | — | Enter P2 | — | — |
+| P2 idle | Generate | Generate | — | — |
+| P2 previewing | Regenerate | Confirm Avatar | Confirm Avatar | — |
+| P2 selecting-song | Prev Song | Lock & Start | Next Song | — |
+| P3 Playing | Return to P2 (c) | Pause | End to P4 (c) | Change song (c) |
+| P3 Paused | Return to P2 (c) | Resume | End to P4 (c) | Change song (c) |
+| P4 | Repeat | New Song | Exit | — |
+
+---
+
+## Technical Architecture
+
+### Gesture Interaction System
+
+| Parameter | Value |
+|-----------|-------|
+| Detection | MediaPipe Pose (7 upper-body tracking points) |
+| Trigger point | Fingertip estimation: `wrist + (wrist - elbow) * 0.4` |
+| GestureButton Dwell | 400ms |
+| GoBubble Dwell | 200ms |
+| Debounce | 2s per element |
+| Sticky hover | 200ms grace period |
+| Hit area padding | 15% enlarged |
+
+**Gesture visual feedback:**
+
+| State | Feedback |
+|-------|----------|
+| Hovering | Glow ring + scale up (110%) |
+| Triggered | Scale down pulse (95%) / burst animation (GoBubble) |
+| GoBubble hovering | Scale up (125%) + glow shadow + ping animation |
+
+**Gesture disabled during:** Switching state, confirmation dialogs, Result Modal
+
+### Control Priority Rules
+
+1. State transitions are atomic
+2. Inputs are ignored during transitions (Switching state)
+3. Remote input overrides gesture input (when remote is implemented)
+4. Gesture input is disabled during dialogs, switching, and Result Modal
+5. Keyboard input is disabled during dialogs (ConfirmDialog handles its own) and during Result (ResultModal handles its own)
+
+### Failure UX
+
+**Guiding principles:**
+- Fail fast
+- Fail visibly
+- Always provide one clear recovery action
+
+| Failure | Handling | Component |
+|---------|----------|-----------|
+| Camera permission denied | Error message + "Try Again" button | `CameraError` |
+| Avatar generation failed | Red StatusBadge "Generation failed. Retry." + Generate button available | `StatusBadge` (failed) |
+| Avatar generation timeout | Not implemented | — |
+| Remote disconnected | Remote not implemented | — |
+| Tracking lost mid-session | No specific handling | — |
+
+### Flow Generation System
+
+#### Input
+- Song audio characteristics (tempo, duration, beats)
+
+#### Processing
+1. Analyze song characteristics
+2. Match Phase templates from Firestore `phase_templates` collection
+3. Arrange sequence based on tempo and duration
+4. Generate complete Flow
+
+#### Output
+- Flow JSON (containing multiple Phase instances)
+- Each Phase includes: position, time, trajectory
+
+### Phase Types
+
+| Type | Tracked Points | Validation Rule |
+|------|---------------|-----------------|
+| Neutral | Head, Shoulders, Elbows | No validation, record baseline |
+| Pose Hold | Head, Shoulders, Elbows | Reach position + hold time |
+| Hand Motion | Hands, Elbows | Start/end position + direction + rhythm |
+
+### Avatar System
+
+#### Page 2 Behavior
+| Stage | Pose | Expression |
+|-------|------|-----------|
+| Generation preview | Points to left/right buttons (alternating) | Emotion cycle |
+| Song selection | Points to left/right buttons/bubble (3-position cycle) | Emotion cycle |
+
+#### Page 3 Behavior
+| Property | Value |
+|----------|-------|
+| Pose | Performs actions based on Flow Phase information |
+| Expression | Reacts to user performance (TBD) |
+
+---
+
+## Design Principles
+
+### Safety Constraints (Not Personalizable)
+- Minimum pose hold time
+- Minimum elbow participation threshold
+- At least one effective shoulder opening per session
+
+### Personalizable (Gradual Adjustment)
+- Pose hold duration
+- Positional tolerance
+- Elbow participation threshold
+- Hand motion tempo
+
+### Not Personalizable
+- Total session duration
+- Phase order
+- Movement semantic types
+- Tracked points (always 7)
+
+---
+
+## Smart Logic (Authorized Only)
+
+### Smart Logic 1 - Intent Detection
+- Detects if user is moving toward target
+- Affects feedback tone only
+- Does not affect success determination, timing, or validation
+
+### Smart Logic 2 - Time Fine-Tuning
+- Phase duration adjustable ±0.5s
+- Within Phase only
+- No skipping or reordering Phases
+- Does not violate safety constraints
+
+### Other Smart Logic
+- No other smart logic exists in V1
+
+---
+
+## Rive Animation System Guide
+
+> This section documents the implementation plan for avatar movement guidance.
 > Added: 2026-02-06
 
-### 为什么选择 Rive
+### Why Rive
 
-| 优点 | 说明 |
-|------|------|
-| 免费 | 基础版免费，够用 |
-| 网页编辑器 | 不需要安装软件，浏览器打开 https://rive.app |
-| 状态机 | 可以根据 Phase 切换动画 |
-| 轻量 | 文件小，加载快 |
-| React 支持 | 有官方 `@rive-app/react-canvas` 库 |
-
----
-
-### 学习 Rive 基础（Day 1-2）
-
-#### Step 1：注册 Rive 账号
-1. 打开 https://rive.app
-2. 点击 "Get Started" 注册（可用 Google 账号）
-3. 进入 Rive Editor（网页版）
-
-#### Step 2：官方教程
-| 教程 | 链接 | 时长 | 学习内容 |
-|------|------|------|---------|
-| 1. 界面介绍 | https://rive.app/learn-rive | 10分钟 | 编辑器基本操作 |
-| 2. 绘制形状 | 同上 | 15分钟 | 画圆、矩形、路径 |
-| 3. 骨骼绑定 | 同上 | 20分钟 | 让角色可以动 |
-| 4. 动画基础 | 同上 | 20分钟 | 关键帧动画 |
-| 5. 状态机 | 同上 | 30分钟 | 根据输入切换动画 |
-
-#### Step 3：社区资源
-- 地址：https://rive.app/community
-- 可下载免费角色模板学习和修改
+| Advantage | Description |
+|-----------|-------------|
+| Free | Basic tier is free, sufficient for needs |
+| Web editor | No software installation needed; use https://rive.app in browser |
+| State machine | Can switch animations based on Phase |
+| Lightweight | Small file size, fast loading |
+| React support | Official `@rive-app/react-canvas` library |
 
 ---
 
-### 角色设计需求
+### Learning Rive Basics (Day 1-2)
 
-#### 角色部位
-| 部位 | 要求 |
-|------|------|
-| 头部 | 比真实大 10%，有表情变化 |
-| 身体 | 简化的上半身 |
-| 手臂 | 可以举起、放下、指向 |
-| 手 | 可以挥动 |
+#### Step 1: Register Rive Account
+1. Go to https://rive.app
+2. Click "Get Started" to register (Google account supported)
+3. Enter Rive Editor (web-based)
 
-#### 需要的动画列表
+#### Step 2: Official Tutorials
+| Tutorial | Link | Duration | Content |
+|----------|------|----------|---------|
+| 1. Interface Tour | https://rive.app/learn-rive | 10 min | Editor basics |
+| 2. Drawing Shapes | Same | 15 min | Circles, rectangles, paths |
+| 3. Bones & Rigging | Same | 20 min | Make characters movable |
+| 4. Animation Basics | Same | 20 min | Keyframe animation |
+| 5. State Machines | Same | 30 min | Switch animations by input |
 
-**Page 2 用（预设循环）：**
-| 动画 | 描述 | 循环 |
-|------|------|------|
-| `idle` | 待机呼吸 | ✅ |
-| `point_left` | 指向左键 | ✅ |
-| `point_right` | 指向右键 | ✅ |
-| `point_go` | 指向气泡 | ✅ |
-| `emotion_happy` | 开心表情 | |
-| `emotion_neutral` | 平静表情 | |
-
-**Page 3 用（跟随 Flow）：**
-| 动画 | 描述 | Phase 类型 |
-|------|------|-----------|
-| `neutral_pose` | 中立姿势 | Neutral |
-| `arms_up` | 双手举起 | Pose Hold |
-| `arms_out` | 双手展开 | Pose Hold |
-| `neck_tilt_left` | 头向左倾 | Pose Hold |
-| `neck_tilt_right` | 头向右倾 | Pose Hold |
-| `wave_motion` | 手部挥动 | Hand Motion |
+#### Step 3: Community Resources
+- URL: https://rive.app/community
+- Download free character templates to learn and modify
 
 ---
 
-### 状态机设计
+### Character Design Requirements
+
+#### Character Parts
+| Part | Requirement |
+|------|-------------|
+| Head | 10% larger than real, with expression changes |
+| Body | Simplified upper body |
+| Arms | Can raise, lower, point |
+| Hands | Can wave |
+
+#### Required Animation List
+
+**Page 2 (Preset Loops):**
+| Animation | Description | Loop |
+|-----------|-------------|------|
+| `idle` | Idle breathing | Loop |
+| `point_left` | Point to left button | Loop |
+| `point_right` | Point to right button | Loop |
+| `point_go` | Point to Go Bubble | Loop |
+| `emotion_happy` | Happy expression | |
+| `emotion_neutral` | Calm expression | |
+
+**Page 3 (Follow Flow):**
+| Animation | Description | Phase Type |
+|-----------|-------------|-----------|
+| `neutral_pose` | Neutral pose | Neutral |
+| `arms_up` | Arms raised | Pose Hold |
+| `arms_out` | Arms spread | Pose Hold |
+| `neck_tilt_left` | Head tilt left | Pose Hold |
+| `neck_tilt_right` | Head tilt right | Pose Hold |
+| `wave_motion` | Hand waving | Hand Motion |
+
+---
+
+### State Machine Design
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    State Machine                     │
-├─────────────────────────────────────────────────────┤
-│                                                      │
-│  输入（Inputs）:                                      │
-│  ├── phase_type: Number (0=neutral, 1=pose, 2=motion)│
-│  ├── pose_index: Number (具体哪个动作)                │
-│  └── emotion: Number (0=neutral, 1=happy, 2=sad...)  │
-│                                                      │
-│  状态（States）:                                      │
-│  ├── Idle Layer (always playing)                     │
-│  │   └── idle (breathing animation)                  │
-│  │                                                   │
-│  ├── Pose Layer                                      │
-│  │   ├── neutral_pose                                │
-│  │   ├── arms_up                                     │
-│  │   ├── arms_out                                    │
-│  │   └── neck_tilt                                   │
-│  │                                                   │
-│  └── Emotion Layer                                   │
-│      ├── emotion_happy                               │
-│      ├── emotion_neutral                             │
-│      └── emotion_sad                                 │
-│                                                      │
-└─────────────────────────────────────────────────────┘
++-----------------------------------------------------+
+|                    State Machine                     |
+|-----------------------------------------------------|
+|                                                      |
+|  Inputs:                                             |
+|  +-- phase_type: Number (0=neutral, 1=pose, 2=motion)|
+|  +-- pose_index: Number (specific action index)      |
+|  +-- emotion: Number (0=neutral, 1=happy, 2=sad...)  |
+|                                                      |
+|  States:                                             |
+|  +-- Idle Layer (always playing)                     |
+|  |   +-- idle (breathing animation)                  |
+|  |                                                   |
+|  +-- Pose Layer                                      |
+|  |   +-- neutral_pose                                |
+|  |   +-- arms_up                                     |
+|  |   +-- arms_out                                    |
+|  |   +-- neck_tilt                                   |
+|  |                                                   |
+|  +-- Emotion Layer                                   |
+|      +-- emotion_happy                               |
+|      +-- emotion_neutral                             |
+|      +-- emotion_sad                                 |
+|                                                      |
++-----------------------------------------------------+
 ```
 
 ---
 
-### 前端集成代码
+### Frontend Integration Code
 
-#### 文件位置
+#### File Locations
 ```
-frontend/modules/visual-feedback/rive-character.tsx  (已存在占位组件)
-frontend/public/avatar.riv                           (待创建)
+frontend/modules/visual-feedback/rive-character.tsx  (placeholder component exists)
+frontend/public/avatar.riv                           (to be created)
 ```
 
-#### 集成代码示例
+#### Integration Code Example
 ```tsx
 import { useRive, useStateMachineInput } from '@rive-app/react-canvas';
 import { useEffect } from 'react';
 
 interface RiveCharacterProps {
   phaseType: number;   // 0=neutral, 1=pose_hold, 2=hand_motion
-  poseIndex: number;   // 具体动作索引
-  emotion: number;     // 表情索引
+  poseIndex: number;   // Specific action index
+  emotion: number;     // Expression index
 }
 
 export function RiveCharacter({ phaseType, poseIndex, emotion }: RiveCharacterProps) {
@@ -588,12 +747,10 @@ export function RiveCharacter({ phaseType, poseIndex, emotion }: RiveCharacterPr
     autoplay: true,
   });
 
-  // 获取状态机输入
   const phaseInput = useStateMachineInput(rive, 'MainStateMachine', 'phase_type');
   const poseInput = useStateMachineInput(rive, 'MainStateMachine', 'pose_index');
   const emotionInput = useStateMachineInput(rive, 'MainStateMachine', 'emotion');
 
-  // 当 phase 变化时，更新状态机
   useEffect(() => {
     if (phaseInput) phaseInput.value = phaseType;
     if (poseInput) poseInput.value = poseIndex;
@@ -606,68 +763,66 @@ export function RiveCharacter({ phaseType, poseIndex, emotion }: RiveCharacterPr
 
 ---
 
-### 实施计划
+### Implementation Plan
 
-#### 阶段 1：学习 Rive（Day 1-2）
-| 任务 | 时间 |
+#### Stage 1: Learn Rive (Day 1-2)
+| Task | Time |
 |------|------|
-| 注册账号，熟悉界面 | 30分钟 |
-| 完成官方教程 1-5 | 2小时 |
-| 下载社区模板练习 | 1小时 |
-| 尝试创建简单角色 | 2小时 |
+| Register account, explore interface | 30 min |
+| Complete official tutorials 1-5 | 2 hours |
+| Download community templates to practice | 1 hour |
+| Try creating a simple character | 2 hours |
 
-#### 阶段 2：创建角色（Day 3-4）
-| 任务 | 时间 |
+#### Stage 2: Create Character (Day 3-4)
+| Task | Time |
 |------|------|
-| 设计角色外观 | 2小时 |
-| 设置骨骼绑定 | 2小时 |
-| 创建基础动画（idle, point） | 3小时 |
-| 创建动作动画（arms_up, wave） | 3小时 |
+| Design character appearance | 2 hours |
+| Set up bone rigging | 2 hours |
+| Create basic animations (idle, point) | 3 hours |
+| Create action animations (arms_up, wave) | 3 hours |
 
-#### 阶段 3：状态机（Day 5）
-| 任务 | 时间 |
+#### Stage 3: State Machine (Day 5)
+| Task | Time |
 |------|------|
-| 设置状态机输入 | 1小时 |
-| 连接动画到状态 | 2小时 |
-| 测试状态切换 | 1小时 |
+| Set up state machine inputs | 1 hour |
+| Connect animations to states | 2 hours |
+| Test state switching | 1 hour |
 
-#### 阶段 4：前端集成（Day 6）
-| 任务 | 时间 |
+#### Stage 4: Frontend Integration (Day 6)
+| Task | Time |
 |------|------|
-| 导出 .riv 文件 | 10分钟 |
-| 更新 RiveCharacter 组件 | 1小时 |
-| 连接 Phase Engine | 2小时 |
-| 测试完整流程 | 1小时 |
+| Export .riv file | 10 min |
+| Update RiveCharacter component | 1 hour |
+| Connect to Phase Engine | 2 hours |
+| Test complete flow | 1 hour |
 
 ---
 
-### 备选方案
+### Alternative Plans
 
-#### 方案 C1：使用 Rive 社区资源
-- 下载接近的角色模板
-- 修改动画适应需求
-- 比从零开始快很多
+#### Plan C1: Use Rive Community Resources
+- Download a close character template
+- Modify animations to fit requirements
+- Much faster than building from scratch
 
-推荐搜索关键词：
+Recommended search keywords:
 - "character"
 - "person"
 - "avatar"
 
-#### 方案 C2：委托设计
-平台：
-- Fiverr（搜索 "Rive animation"）
+#### Plan C2: Commission Design
+Platforms:
+- Fiverr (search "Rive animation")
 - Upwork
-- 价格通常 $50-200
+- Typical cost: $50-200
 
 ---
 
----
+## Part 6: Architecture Implementation Status
 
-## Part 6: 架构实现状态
+> Comparing designed architecture vs actual implementation
 
-> 对比设计架构与实际实现
-
-### 设计架构（Hard Boundary）
+### Designed Architecture (Hard Boundary)
 
 ```
 Frontend (Next.js):
@@ -676,120 +831,165 @@ Frontend (Next.js):
 - Real-time Phase Engine + validators
 - Rive animation playback (reference guide)
 - Visual feedback overlays
+- Full keyboard mapping (all pages/states)
 
 Backend (Python FastAPI on Cloud Run):
 - Firebase Anonymous Auth integration
-- Firestore storage: users, sessions, flows, personalization params
+- Firestore storage: users, sessions, flows, phase_templates, personalization params
 - Post-session Gemini summarization only (no real-time)
 - Stores only symbolic session outcomes, not raw frames
 ```
 
-### Frontend 实现状态
+### Frontend Implementation Status
 
-| 设计要求 | 状态 | 实现位置 |
-|---------|------|---------|
-| Webcam getUserMedia | ✅ 已完成 | `lib/use-webcam.ts` |
-| MediaPipe Pose (7 points) | ✅ 已完成 | `modules/pose-validation/mediapipe-tracker.ts` |
-| Real-time Phase Engine | ✅ 已完成 | `modules/flow-engine/phase-engine.ts` |
-| Validators | ✅ 已完成 | `modules/pose-validation/pose-hold-validator.ts`, `hand-motion-validator.ts` |
-| Rive animation playback | ⚠️ 占位符 | `modules/visual-feedback/rive-character.tsx` (无实际动画) |
-| Visual feedback overlays | ✅ 已完成 | `modules/visual-feedback/phase-hud.tsx`, `skeleton-canvas.tsx` |
+| Requirement | Status | Location |
+|-------------|--------|----------|
+| Webcam getUserMedia | ✅ Done | `lib/use-webcam.ts` |
+| MediaPipe Pose (7 points) | ✅ Done | `modules/pose-validation/mediapipe-tracker.ts` |
+| Real-time Phase Engine | ✅ Done | `modules/flow-engine/phase-engine.ts` |
+| Validators | ✅ Done | `modules/pose-validation/pose-hold-validator.ts`, `hand-motion-validator.ts` |
+| Rive animation playback | ⚠️ Placeholder | `modules/visual-feedback/rive-character.tsx` (no actual animation) |
+| Visual feedback overlays | ✅ Done | `modules/visual-feedback/phase-hud.tsx`, `skeleton-canvas.tsx` |
+| Keyboard mapping (all pages) | ✅ Done | `page.tsx`, `avatar/page.tsx`, `game/page.tsx`, `result-modal.tsx` |
+| Avatar generation failure UI | ✅ Done | `StatusBadge` (failed) |
 
-### Backend 实现状态
+### Backend Implementation Status
 
-| 设计要求 | 状态 | 实现位置 |
-|---------|------|---------|
-| Firebase Anonymous Auth | ✅ 已完成 | `backend/app/services/auth.py` |
-| Firestore - users | ⚠️ 需验证 | 可能在 user_params 中 |
-| Firestore - sessions | ✅ 已完成 | `backend/app/routers/sessions.py` |
-| Firestore - flows | ✅ 已完成 | `backend/app/routers/flows.py` |
-| Firestore - personalization params | ✅ 已完成 | `backend/app/routers/user_params.py` |
-| Post-session Gemini summarization | ✅ 已完成 | `backend/app/services/gemini.py` |
-| Symbolic outcomes only (no raw frames) | ✅ 符合设计 | 无图像存储逻辑 |
+| Requirement | Status | Location |
+|-------------|--------|----------|
+| Firebase Anonymous Auth | ✅ Done | `backend/app/services/auth.py` |
+| Firestore - sessions | ✅ Done | `backend/app/routes/session.py` |
+| Firestore - flows | ⚠️ Hardcoded | `backend/app/services/flow.py` (needs Firestore replacement) |
+| Firestore - phase_templates | ✅ Done | `backend/app/services/phase_template.py`, `backend/app/routes/phase_template.py` |
+| Firestore - personalization params | ✅ Done | `backend/app/routes/user_params.py` |
+| Post-session Gemini summarization | ✅ Done | `backend/app/services/gemini.py` |
+| Symbolic outcomes only | ✅ Compliant | No image storage logic |
 
-### 未完成项目
+### Remaining Items
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| Rive 动画 | ❌ 未完成 | 组件存在但无实际 .riv 文件和动画 |
-| Avatar 生成 API | ❌ 未集成 | 前端是 2 秒占位符，后端有 `avatar.py` 但未连接 |
-| 音乐分析 → Flow 生成 | ❓ 需验证 | WORKFLOW 说要分析音乐生成 Flow，需确认后端是否实现 |
-| 手机遥控器 | ❌ 未完成 | WebSocket 未实现，QR 配对未实现 |
-
-### 差距总结
-
-| 类别 | 设计 | 现状 | 差距 |
-|------|------|------|------|
-| 前端核心 | 5 项 | 4 项完成 | Rive 未完成 |
-| 后端核心 | 4 项 | 4 项完成 | ✅ 一致 |
-| 额外功能 | - | - | Avatar API、音乐分析、遥控器 |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Dynamic Flow generation | ❌ Not done | Need to compose Flows from Phase template library, replace hardcoded |
+| Rive animation | ❌ Not done | Component exists but no actual .riv file or animations |
+| Avatar generation API | ❌ Not integrated | Frontend uses 2s placeholder; backend has `avatar.py` but not connected |
+| Mobile remote | ❌ Not done | WebSocket not implemented, QR pairing not implemented |
 
 ---
 
-## Part 7: 关键技术决策记录
+## Part 7: Key Technical Decision Records
 
-> 记录开发过程中的重要设计决策
+> Records of important design decisions made during development
 
-### 2026-02-06 决策
+### 2026-02-06 Decisions
 
-#### 1. Smart Framing（智能取景）
-**问题**：用户只能看到大头照，看不到上半身
-**决策**：使用 MediaPipe head/shoulder Y 坐标动态计算 `object-position`
-**实现**：
-- 请求 1280×720 视频
-- `object-cover` 保持无黑边
-- `object-position: center ${offset}%` 动态调整
-- EMA 平滑（系数 0.1）
-- 边界：10-40%，默认 25%
+#### 1. Smart Framing
+**Problem:** User could only see head close-up, not upper body
+**Decision:** Use MediaPipe head/shoulder Y coordinates to dynamically calculate `object-position`
+**Implementation:**
+- Request 1280x720 video
+- `object-cover` to maintain no black bars
+- `object-position: center ${offset}%` dynamic adjustment
+- EMA smoothing (coefficient 0.1)
+- Bounds: 10-40%, default 25%
 
-#### 2. 手势触发优化
-**问题**：手势触发不够灵敏
-**决策**：
-- GoBubble 尺寸增大到 150px
-- Dwell time 减少：GestureButton 300ms, GoBubble 200ms
-- 添加 sticky hover（200ms 宽限期）
-- 增大 padding 到 15%
+#### 2. Gesture Trigger Optimization
+**Problem:** Gesture trigger was not responsive enough
+**Decision:**
+- GoBubble size increased to 150px
+- Dwell time: GestureButton 400ms, GoBubble 200ms
+- Added sticky hover (200ms grace period)
+- Increased padding to 15%
 
-#### 3. 手掌位置估算
-**问题**：MediaPipe 只提供手腕位置，需要估算手掌/指尖
-**决策**：`手掌 = 手腕 + (手腕 - 手肘) × 0.4`
-**说明**：手掌长度约为前臂的 40%
+#### 3. Palm Position Estimation
+**Problem:** MediaPipe only provides wrist position; need to estimate palm/fingertip
+**Decision:** `palm = wrist + (wrist - elbow) × 0.4`
+**Note:** Palm length is approximately 40% of forearm length
 
-#### 4. 歌曲选择位置
-**问题**：歌曲选择最初在 Page 3
-**决策**：移至 Page 2，让 Page 3 成为纯执行空间
-**实现**：
-- Page 2 添加 SongCarousel + GoBubble
-- Page 3 通过 URL 参数接收 songId
-- Page 3 的歌曲显示为只读
+#### 4. Song Selection Location
+**Problem:** Song selection was initially on Page 3
+**Decision:** Moved to Page 2, making Page 3 a pure execution space
+**Implementation:**
+- Page 2 added SongCarousel + GoBubble
+- Page 3 receives songId via URL parameter
+- Page 3 Song Display is read-only
 
-#### 5. 暂停视觉反馈
-**问题**：暂停时无明显视觉区分
-**决策**：添加 PauseOverlay 组件
-**实现**：
-- 半透明黑色背景（40%）
-- 暂停图标（两个竖条）
-- "Paused" 文字
-- 继续操作提示
+#### 5. Pause Visual Feedback
+**Problem:** Paused state had no clear visual distinction
+**Decision:** Added PauseOverlay component
+**Implementation:**
+- Semi-transparent black background (40%)
+- Pause icon (two vertical bars)
+- "Paused" text
+- "Press Enter or remote confirm to resume" hint
 
-#### 6. 摄像头错误恢复
-**问题**：摄像头失败后无法重试
-**决策**：添加 CameraError 组件 + retry 函数
-**实现**：
-- 错误图标 + 错误信息
-- "Try Again" 按钮
-- `use-webcam.ts` 添加 `retry()` 方法
+#### 6. Camera Error Recovery
+**Problem:** No way to retry after camera failure
+**Decision:** Added CameraError component + retry function
+**Implementation:**
+- Error icon + error message
+- "Try Again" button
+- `use-webcam.ts` added `retry()` method
 
-#### 7. 卡通形象动画方案
-**问题**：卡通形象不会动，无法引导用户
-**决策**：使用 Rive 动画系统
-**理由**：
-- 免费、网页编辑器
-- 支持状态机（根据 Phase 切换动画）
-- 轻量、React 支持好
-**状态**：待实施（见 Rive 动画系统实施指南）
+#### 7. Avatar Animation Approach
+**Problem:** Avatar couldn't move, couldn't guide users
+**Decision:** Use Rive animation system
+**Rationale:**
+- Free, web-based editor
+- Supports state machines (switch animations based on Phase)
+- Lightweight, good React support
+**Status:** Pending implementation (see Rive Animation System Guide)
+
+### 2026-02-09 Decisions
+
+#### 8. Full Keyboard Mapping
+**Problem:** P1/P2/P4(Result) had no keyboard support, mouse-only
+**Decision:** Add keyboard mapping to all pages and all states
+**Principles:**
+- ArrowLeft/Right = spatial mapping (corresponds to on-screen left/right buttons)
+- Enter/Space = primary forward action of current context
+- P2 idle state: both ArrowLeft and Enter trigger Generate (only available action)
+
+#### 9. Avatar Generation Failure UI
+**Problem:** Avatar generation failure silently returned to idle; user had no indication
+**Decision:** Show red StatusBadge "Generation failed. Retry."
+**Implementation:** Added `generationFailed` state variable; failed badge shown on failure
+
+#### 10. GestureButton Dwell Time Adjustment
+**Problem:** Spec 500ms was too slow; code 300ms was too fast
+**Decision:** Adjusted to 400ms (balance between responsiveness and accidental triggers)
+**GoBubble stays at 200ms** (fast trigger to enter game)
+
+#### 11. Phase Template Data Model
+**Problem:** Phases were hardcoded in code; could not dynamically generate Flows
+**Decision:** Phase templates stored in Firestore `phase_templates` collection
+**Key field design:**
+- `intent` + `verification_notes[]` replaces single `description` (structured, downstream-usable)
+- `primary_anchors` uses group shorthand (`shoulder`, `elbow`, `hand`); expanded to specific tracked points at Flow generation time
 
 ---
 
-*此文档基于 2026-02-06 与用户确认的完整流程*
-*PRD 核心原则、动作安全约束、关键决策记录添加于 2026-02-06*
+## Design Token Reference
+
+> Key CSS custom properties defined in `frontend/app/globals.css`.
+> For full details see UX_SPEC.md Section 15.
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--opacity-avatar-setup` | 0.9 | P2 avatar overlay |
+| `--opacity-avatar-game` | 0.8 | P3 avatar overlay |
+| `--opacity-overlay-dim` | 0.6 | Dialog backgrounds |
+| `--color-primary` | #3b82f6 | Primary actions, Go Bubble |
+| `--color-success` | #22c55e | Locked state, high completion |
+| `--color-warning` | #f59e0b | Previewing, paused states |
+| `--color-error` | #ef4444 | Generation failure |
+| `--z-dialog` | (defined) | Confirmation dialog layer |
+| `--z-overlay` | (defined) | Result modal layer |
+| `--z-floating` | (defined) | Buttons, Go Bubble |
+| `--z-hud` | (defined) | Top bar elements |
+
+---
+
+*This document is aligned with UX_SPEC.md v1.1 (2026-02-09)*
+*PRD Core Principles (Part 1-2) are immutable*
+*User Flow (Part 3) aligned with UX_SPEC.md v1.1*
+*Key Decision Records are continuously updated*

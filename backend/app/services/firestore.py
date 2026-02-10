@@ -53,6 +53,13 @@ def get_document(collection: str, doc_id: str) -> dict | None:
     return doc.to_dict() if doc.exists else None
 
 
+def list_documents(collection: str) -> list[dict]:
+    if _use_fallback:
+        return list(_fallback.get(collection, {}).values())
+    docs = _db.collection(collection).stream()
+    return [doc.to_dict() for doc in docs]
+
+
 def update_document(collection: str, doc_id: str, data: dict) -> None:
     if _use_fallback:
         existing = _fallback.get(collection, {}).get(doc_id)
