@@ -1,5 +1,15 @@
+# secrets
 .env
+.env.local
+.env.production
+*.key
+*.pem
+
+# service-account / credentials
+service-account*.json
+credentials/
+
+# python
 *.pyc
 __pycache__/
 .venv/
-service-account.json

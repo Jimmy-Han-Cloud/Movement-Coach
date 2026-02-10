@@ -394,23 +394,10 @@ Phase 模板是独立的可复用动作片段，存储于 Firestore `phases` 集
 
 ## 环境配置
 
-### Backend `.env`
-```
-FIREBASE_SERVICE_ACCOUNT_PATH=/Users/hh/Newproject/2Movement Coach/Movement-Coach/backend/credentials/service-account.json
-GOOGLE_CLOUD_PROJECT=movement-coach-62e3c
-```
+> 真实值不纳入版本控制。
 
-### Frontend `.env.local`
-```
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_AUTH_DEBUG=false
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyBq8BO73pgGed0y94bK9GtmKJOtnT9dyBk
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=movement-coach-62e3c.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=movement-coach-62e3c
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=movement-coach-62e3c.firebasestorage.app
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=25671856112
-NEXT_PUBLIC_FIREBASE_APP_ID=1:25671856112:web:1bdc00f77d04feb247b735
-```
+- **Backend**: 复制 `backend/.env.example` → `backend/.env`，填入真实值
+- **Frontend**: 复制 `frontend/.env.example` → `frontend/.env.local`，填入真实值
 
 ---
 

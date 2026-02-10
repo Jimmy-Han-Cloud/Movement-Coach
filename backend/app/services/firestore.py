@@ -67,3 +67,23 @@ def update_document(collection: str, doc_id: str, data: dict) -> None:
             existing.update(data)
         return
     _db.collection(collection).document(doc_id).update(data)
+
+
+# ── debug helpers (fallback mode only) ───────────────────────────
+
+def is_fallback_mode() -> bool:
+    return _use_fallback
+
+
+def debug_list_collection(collection: str) -> dict[str, Any]:
+    """Return all doc IDs in a fallback collection. No-op in Firestore mode."""
+    if not _use_fallback:
+        return {}
+    return _fallback.get(collection, {})
+
+
+def debug_clear_all() -> None:
+    """Clear all in-memory fallback data. No-op in Firestore mode."""
+    if not _use_fallback:
+        return
+    _fallback.clear()
