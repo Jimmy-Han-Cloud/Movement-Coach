@@ -859,7 +859,7 @@ Backend (Python FastAPI on Cloud Run):
 |-------------|--------|----------|
 | Firebase Anonymous Auth | ✅ Done | `backend/app/services/auth.py` |
 | Firestore - sessions | ✅ Done | `backend/app/routes/session.py` |
-| Firestore - flows | ⚠️ Hardcoded | `backend/app/services/flow.py` (needs Firestore replacement) |
+| Firestore - flows | ✅ Done | `backend/app/services/flow.py` (hardcoded) + `backend/app/services/flow_generator.py` (dynamic generation) |
 | Firestore - phase_templates | ✅ Done | `backend/app/services/phase_template.py`, `backend/app/routes/phase_template.py` |
 | Firestore - personalization params | ✅ Done | `backend/app/routes/user_params.py` |
 | Post-session Gemini summarization | ✅ Done | `backend/app/services/gemini.py` |
@@ -869,7 +869,7 @@ Backend (Python FastAPI on Cloud Run):
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Dynamic Flow generation | ❌ Not done | Need to compose Flows from Phase template library, replace hardcoded |
+| Dynamic Flow generation | ✅ Done | `POST /api/flows/generate` — composes Flows from Phase templates (60-600s, any tempo) |
 | Rive animation | ❌ Not done | Component exists but no actual .riv file or animations |
 | Avatar generation API | ❌ Not integrated | Frontend uses 2s placeholder; backend has `avatar.py` but not connected |
 | Mobile remote | ❌ Not done | WebSocket not implemented, QR pairing not implemented |
@@ -937,7 +937,7 @@ Backend (Python FastAPI on Cloud Run):
 - Free, web-based editor
 - Supports state machines (switch animations based on Phase)
 - Lightweight, good React support
-**Status:** Pending implementation (see Rive Animation System Guide)
+**Status:** In progress — user creating .riv skeleton (see Rive Animation System Guide)
 
 ### 2026-02-09 Decisions
 

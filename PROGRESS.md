@@ -31,19 +31,22 @@
 
 ## 已完成工作
 
-### Backend（8 步 + Avatar 功能）✅
+### Backend（11 步 + Avatar 功能）✅
 
 | Step | 描述 | 关键文件 |
 |------|------|----------|
 | 1 | 项目骨架 FastAPI + Uvicorn | `backend/app/main.py` |
-| 2 | Flow 数据模型 + Flow API | `backend/app/models/flow.py`, `backend/app/routers/flows.py` |
-| 3 | Session 生命周期 (create, submit, get) | `backend/app/models/session.py`, `backend/app/routers/sessions.py` |
+| 2 | Flow 数据模型 + Flow API | `backend/app/models/flow.py`, `backend/app/routes/flow.py` |
+| 3 | Session 生命周期 (create, submit, get) | `backend/app/models/session.py`, `backend/app/routes/session.py` |
 | 4 | Firestore 集成 (含内存 fallback) | `backend/app/services/firestore.py` |
 | 5 | Gemini API post-session summary | `backend/app/services/gemini.py` |
 | 6 | CORS + Firebase Auth 中间件 | `backend/app/services/auth.py` |
-| 7 | User personalization parameters | `backend/app/models/user_params.py`, `backend/app/routers/user_params.py` |
-| 8 | Debug endpoints + production mode | `backend/app/routers/debug.py` |
+| 7 | User personalization parameters | `backend/app/models/user_params.py`, `backend/app/routes/user_params.py` |
+| 8 | Debug endpoints + production mode | `backend/app/routes/debug.py` |
 | + | Avatar 生成 (照片→卡通头像) | `backend/app/services/avatar.py` |
+| 9 | Phase 模板库 (10 模板 + seed + CRUD) | `backend/app/models/phase_template.py`, `backend/app/services/phase_template.py`, `backend/app/routes/phase_template.py` |
+| 10 | Flow 动态生成服务 | `backend/app/models/flow_generate.py`, `backend/app/services/flow_generator.py` |
+| 11 | 安全加固 (routes 隔离 + .gitignore) | `backend/app/routes/debug.py`, `backend/.gitignore` |
 
 ### Frontend（7 步 + Step 8 UI/UX）✅
 
@@ -118,11 +121,13 @@
 - [x] **全页面键盘映射** (2026-02-09) — P1/P2/P3/P4 所有状态
 - [x] **Avatar 生成失败 UI** (2026-02-09) — 红色 StatusBadge "Generation failed. Retry."
 - [x] **UX_SPEC.md v1.1** (2026-02-09) — 与实现对齐的权威 UX 文档
-- [ ] Phase 模板库存入 Firestore ⬅️ 当前任务
-- [ ] Flow 动态生成服务
-- [ ] Rive 动画是占位符
-- [ ] 手机遥控器未实现（WebSocket）
+- [x] **Phase 模板库存入 Firestore** ✅ (2026-02-09) — 10 模板 + seed 端点 + CRUD API
+- [x] **Flow 动态生成服务** ✅ (2026-02-09) — `POST /api/flows/generate`，60-600s 任意时长
+- [x] **安全加固** ✅ (2026-02-09) — routes 无直接 Firestore 访问、.gitignore 加固、PROGRESS.md 移除真实配置
+- [ ] Frontend 接入动态 Flow（game 页面仍只用计时器） ⬅️ 下一步
+- [ ] Rive 动画（用户制作中）
 - [ ] Avatar 生成 API 集成
+- [ ] 手机遥控器未实现（WebSocket）
 
 ---
 
@@ -146,19 +151,21 @@
 | 设计要求 | 状态 | 说明 |
 |---------|------|------|
 | Firebase Anonymous Auth | ✅ | `backend/app/services/auth.py` |
-| Firestore - sessions | ✅ | `backend/app/routers/sessions.py` |
-| Firestore - flows | ✅ | `backend/app/routers/flows.py` |
-| Firestore - user params | ✅ | `backend/app/routers/user_params.py` |
+| Firestore - sessions | ✅ | `backend/app/routes/session.py` |
+| Firestore - flows | ✅ | `backend/app/routes/flow.py` |
+| Firestore - user params | ✅ | `backend/app/routes/user_params.py` |
+| Firestore - phase templates | ✅ | `backend/app/routes/phase_template.py` |
+| Flow 动态生成 | ✅ | `backend/app/services/flow_generator.py` |
 | Gemini summarization | ✅ | `backend/app/services/gemini.py` |
 | Symbolic outcomes only | ✅ | 无图像存储 |
+| 安全隔离 | ✅ | routes 不直接访问 Firestore |
 
 ### 待完成项目
 
 | 功能 | 优先级 | 说明 |
 |------|--------|------|
-| Phase 模板库 → Firestore | 🔴 高 | 10 个 Phase 已设计，待存入数据库 |
-| Flow 动态生成服务 | 🔴 高 | 从 Phase 库组合 Flow，替换硬编码 |
-| Rive 动画 | 🔴 高 | V1 Demo 必需 |
+| Frontend Flow 集成 | 🔴 高 | game 页面接入 PhaseEngine + 动态 Flow |
+| Rive 动画 | 🔴 高 | V1 Demo 必需，用户制作中 |
 | Avatar 生成 API 集成 | 🟡 中 | 后端存在，前端未连接 |
 | 手机遥控器 | 🟢 低 | V1.1 功能 |
 
@@ -248,9 +255,9 @@ Phase 模板是独立的可复用动作片段，存储于 Firestore `phases` 集
 - [x] 10 个 Phase 内容设计完成
 - [x] 数据模型字段确认
 - [x] 设计决策记录
-- [ ] 写入 Firestore ⬅️ 下一步
-- [ ] Flow 生成服务（从 Phase 库组合）
-- [ ] 替换硬编码的 `services/flow.py`
+- [x] 写入 Firestore ✅ (2026-02-09) — `backend/app/services/phase_template.py`
+- [x] Flow 生成服务 ✅ (2026-02-09) — `backend/app/services/flow_generator.py`
+- [ ] Frontend 接入（替换 game 页面纯计时器）
 
 ---
 
@@ -362,8 +369,7 @@ Phase 模板是独立的可复用动作片段，存储于 Firestore `phases` 集
 
 ## 下一步计划
 
-### 🔴 Phase 模板库 + Flow 生成（当前优先）
-目标：**Phase 存入 Firestore，Flow 动态生成替换硬编码**
+### ✅ Phase 模板库 + Flow 生成（已完成）
 
 - [x] 添加暂停视觉覆盖层 ✅ (2026-02-06)
 - [x] 添加摄像头错误重试按钮 ✅ (2026-02-06)
@@ -371,21 +377,27 @@ Phase 模板是独立的可复用动作片段，存储于 Firestore `phases` 集
 - [x] Avatar 生成失败 UI ✅ (2026-02-09)
 - [x] UX_SPEC.md v1.1 ✅ (2026-02-09)
 - [x] Phase 模板设计（10 个） ✅ (2026-02-09)
-- [ ] **Phase 模板写入 Firestore** ⬅️ 当前任务
-- [ ] Flow 动态生成服务
-- [ ] 替换硬编码 `services/flow.py`
+- [x] Phase 模板写入 Firestore ✅ (2026-02-09)
+- [x] Flow 动态生成服务 ✅ (2026-02-09)
+- [x] 安全加固 ✅ (2026-02-09)
+
+### 🔴 Frontend Flow 集成（下一步）
+目标：**game 页面接入 PhaseEngine + 动态生成的 Flow**
+
+- [ ] game 页面调用 `POST /api/flows/generate` 获取 Flow
+- [ ] 接入 PhaseEngine，HUD 显示 phase name/description
 - [ ] 端到端测试完整流程
 
-### Rive 动画（卡通形象动作引导）
-- [ ] 创建基础 Rive 动画文件
+### 🔴 Rive 动画（用户制作中）
+- [ ] 创建基础 Rive 动画文件（骨架）
 - [ ] 状态机设计（idle/pose/transition）
 - [ ] 与 Page 1/2/3 集成
 
-### Avatar 生成 API 集成
+### 🟡 Avatar 生成 API 集成
 - [ ] 前后端连接
 - [ ] 实时叠加显示
 
-### 手机遥控器（V1.1）
+### 🟢 手机遥控器（V1.1）
 - [ ] WebSocket 服务
 - [ ] 手机端 PWA 页面
 - [ ] QR 码配对
@@ -413,4 +425,4 @@ cd frontend && npm run dev
 
 ---
 
-*最后更新: 2026-02-09 (键盘映射、失败UI、UX_SPEC v1.1、Phase模板库设计)*
+*最后更新: 2026-02-09 (Phase模板+Flow生成服务完成、安全加固、移除真实配置)*
