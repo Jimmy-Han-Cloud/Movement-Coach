@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CameraLayout, ResultModal } from "@/components/layouts";
-import { AvatarOverlay } from "@/components/avatar";
+import { RiveCoach } from "@/components/avatar/rive-coach";
 import { SongDisplay, SwitchingOverlay, PauseOverlay, GameHud, type Song } from "@/components/game";
 import { ConfirmDialog, CameraError, type DialogType } from "@/components/ui";
 import { useWebcam } from "@/lib/use-webcam";
@@ -67,6 +67,7 @@ function GameContent() {
   // Dialog state
   const [activeDialog, setActiveDialog] = useState<DialogType | null>(null);
   const [showResult, setShowResult] = useState(false);
+  const [currentAnimation, setCurrentAnimation] = useState("idle");
 
   // Refs for game loop
   const gameLoopRef = useRef<number | null>(null);
@@ -94,6 +95,15 @@ function GameContent() {
   const shoulderY = pose.trackedPoints?.left_shoulder && pose.trackedPoints?.right_shoulder
     ? (pose.trackedPoints.left_shoulder.y + pose.trackedPoints.right_shoulder.y) / 2
     : undefined;
+
+  // Calculate real shoulder width in pixels for Rive scaling
+  const shoulderWidthPx = (() => {
+    const ls = pose.trackedPoints?.left_shoulder;
+    const rs = pose.trackedPoints?.right_shoulder;
+    if (!ls || !rs) return undefined;
+    const screenW = typeof window !== "undefined" ? window.innerWidth : 1280;
+    return Math.abs(rs.x - ls.x) * screenW;
+  })();
 
   // Start webcam on mount
   const hasStartedRef = useRef(false);
@@ -253,6 +263,16 @@ function GameContent() {
           // Switch key for song change (remote escape hatch)
           handleRemoteSongChange();
           break;
+        // Temp: test animation switching
+        case "1":
+          setCurrentAnimation("idle");
+          break;
+        case "2":
+          setCurrentAnimation("pose_shoulder_drop_neck_lift");
+          break;
+        case "3":
+          setCurrentAnimation("pose_chest_open_bilateral");
+          break;
       }
     };
 
@@ -269,10 +289,10 @@ function GameContent() {
         shoulderY={shoulderY}
         dimmed={!!activeDialog || showResult || gameState === "paused"}
         avatarOverlay={
-          <AvatarOverlay
-            avatarUrl="/avatar-placeholder.png"
-            isLocked={true}
-            pageType="game"
+          <RiveCoach
+            animationName={currentAnimation}
+            shoulderWidthPx={shoulderWidthPx}
+            shoulderY={shoulderY}
           />
         }
         topLeft={
