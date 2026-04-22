@@ -65,11 +65,12 @@ export function RiveCoach({
     w = h * (RIVE_W / RIVE_H);
   }
 
-  // Vertical: anchor cartoon shoulder to real shoulder position
+  // Vertical: anchor cartoon shoulder to real shoulder position + 90px downward offset
+  const VERTICAL_OFFSET = 90;
   let top: number;
   if (smoothYRef.current !== null) {
     const realShoulderYPx = smoothYRef.current * screenH;
-    top = realShoulderYPx - h * RIVE_SHOULDER_Y_FRAC;
+    top = realShoulderYPx - h * RIVE_SHOULDER_Y_FRAC + VERTICAL_OFFSET;
   } else {
     top = (screenH - h) / 2;
   }
