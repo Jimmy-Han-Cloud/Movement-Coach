@@ -69,6 +69,13 @@ def update_document(collection: str, doc_id: str, data: dict) -> None:
     _db.collection(collection).document(doc_id).update(data)
 
 
+def delete_document(collection: str, doc_id: str) -> None:
+    if _use_fallback:
+        _fallback.get(collection, {}).pop(doc_id, None)
+        return
+    _db.collection(collection).document(doc_id).delete()
+
+
 # ── debug helpers (fallback mode only) ───────────────────────────
 
 def is_fallback_mode() -> bool:

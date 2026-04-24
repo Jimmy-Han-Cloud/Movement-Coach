@@ -16,6 +16,12 @@ interface UsePhaseEngineReturn {
   start: () => void;
   /** Stop the session */
   stop: () => void;
+  /** Restart from the beginning (resets all state) */
+  restart: () => void;
+  /** Pause the session (halts the RAF loop) */
+  pause: () => void;
+  /** Resume after pause */
+  resume: () => void;
   /** Current engine status */
   status: EngineState["status"];
   /** Index of the active phase */
@@ -26,6 +32,8 @@ interface UsePhaseEngineReturn {
   currentPhaseState: PhaseState | null;
   /** Total elapsed seconds */
   elapsedTotal: number;
+  /** Phase results populated when session completes */
+  phaseResults: PhaseResult[];
   /** Report validation results from Module 2 */
   reportValidation: PhaseEngine["reportValidation"];
   /** Smart Logic ② timing adjustment */
@@ -44,6 +52,7 @@ export function usePhaseEngine({
   const [currentPhase, setCurrentPhase] = useState<Phase | null>(null);
   const [currentPhaseState, setCurrentPhaseState] = useState<PhaseState | null>(null);
   const [elapsedTotal, setElapsedTotal] = useState(0);
+  const [phaseResults, setPhaseResults] = useState<PhaseResult[]>([]);
 
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
@@ -56,6 +65,7 @@ export function usePhaseEngine({
       },
       onComplete: (results) => {
         setStatus("completed");
+        setPhaseResults(results);
         onCompleteRef.current?.(results);
       },
       onTick: (state) => {
@@ -73,8 +83,11 @@ export function usePhaseEngine({
     };
   }, [flow, userParams]);
 
-  const start = useCallback(() => engineRef.current?.start(), []);
-  const stop = useCallback(() => engineRef.current?.stop(), []);
+  const start   = useCallback(() => engineRef.current?.start(),   []);
+  const stop    = useCallback(() => engineRef.current?.stop(),    []);
+  const pause   = useCallback(() => engineRef.current?.pause(),   []);
+  const resume  = useCallback(() => engineRef.current?.resume(),  []);
+  const restart = useCallback(() => engineRef.current?.restart(), []);
 
   const reportValidation = useCallback(
     (...args: Parameters<PhaseEngine["reportValidation"]>) =>
@@ -91,11 +104,15 @@ export function usePhaseEngine({
   return {
     start,
     stop,
+    restart,
+    pause,
+    resume,
     status,
     currentPhaseIndex,
     currentPhase,
     currentPhaseState,
     elapsedTotal,
+    phaseResults,
     reportValidation,
     adjustPhaseTiming,
   };

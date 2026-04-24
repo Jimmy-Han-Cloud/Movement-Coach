@@ -1,6 +1,6 @@
 import type { Phase, PhaseQuality, PhaseResult, Flow, UserParams } from "@/types";
 
-export type EngineStatus = "idle" | "running" | "completed";
+export type EngineStatus = "idle" | "running" | "paused" | "completed";
 
 export interface PhaseState {
   phase: Phase;

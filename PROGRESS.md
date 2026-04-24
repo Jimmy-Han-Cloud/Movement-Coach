@@ -425,4 +425,43 @@ cd frontend && npm run dev
 
 ---
 
-*最后更新: 2026-02-09 (Phase模板+Flow生成服务完成、安全加固、移除真实配置)*
+---
+
+## Session 2026-04-24 — 已完成
+
+### UX 体验优化
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 1 | **樱花气泡动画增强** — 50片花瓣（原12片），动画1200ms，进入游戏前2秒全屏樱花雨过渡 | ✅ |
+| 2 | **选歌预览音频** — 切换预置歌曲时自动播放15秒预览（音量0.4，跳过10s静音片段） | ✅ |
+| 3 | **PayPal 打赏入口** — ResultModal 底部添加 QR 码区域（占位图 `/public/donate-qr.svg`，待替换真实二维码） | ✅ |
+
+### 游戏逻辑修复
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 4 | **完成度评分改为基于表现** — `performanceScore` 替代纯时间进度；基于 phase 质量（ok=100%/partial=50%/missed=0%）均值计算，排除 neutral phase | ✅ |
+
+### Flow 编排规则重写（核心）
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 5 | **Gemini Prompt 规则重写** — 新节奏结构：`HAND_MOTION(15-30s) → POSE_HOLD(8-12s恢复) → HAND_MOTION…`；所有8个模板必须出现；同一动作可重复，连续重复每次 ≤6s；POSE_HOLD 改为 8-15s（原20-35s） | ✅ |
+| 6 | **`_cap_neutral_duration` 修复** — 原逻辑把多余秒数全堆给最后一个 phase（导致 `pose_elbow_overhead_reach` 末尾持续数十秒）；改为插入新的短 POSE_HOLD phase（≤6s，循环4种模板） | ✅ |
+| 7 | **Firestore 缓存自动修复** — `_load_cached_flow` 读取后验证每个 phase 时长，超限时自动清缓存并触发重新生成（解决 Mozart Minuet 坏缓存问题） | ✅ |
+| 8 | **新增 `delete_document`** — `firestore.py` 补充删除接口，支持 Firestore 和内存 fallback 两种模式 | ✅ |
+
+### Avatar 设计
+
+| # | 任务 | 状态 |
+|---|------|------|
+| 9 | **新 Avatar 设计 Brief** — 生成详细修改描述，指导 Claude Design 修正比例（头身比1:2）、面部（Pixar 风格/圆眼/微笑）、配色（coral/lavender/rose）、结构（头/颈/肩/上臂/下臂分段，适配 Rive 骨骼绑定） | ✅ |
+
+### 待完成项
+
+- [ ] 替换 `/public/donate-qr.svg` 为真实 PayPal 二维码
+- [ ] 按新 Brief 更新 coach Avatar 形象并重新导入 Rive
+- [ ] 端到端测试新 Flow 编排规则（Mozart Minuet 下次启动将自动清缓存重新生成）
+
+*最后更新: 2026-04-24*

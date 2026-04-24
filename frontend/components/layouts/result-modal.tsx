@@ -72,6 +72,17 @@ export function ResultModal({ isOpen, completionPercent, onRepeat, onNewSong, on
             <span>{message}</span>
           </p>
           {children}
+
+          {/* Donation section */}
+          <div className="mt-6 pt-5 border-t border-white/10 flex flex-col items-center gap-2">
+            <p className="text-white/50 text-xs">Enjoying Movement Coach? Support the developer 💙</p>
+            <img
+              src="/donate-qr.svg"
+              alt="PayPal donation QR code"
+              className="w-28 h-28 rounded-xl opacity-90"
+            />
+            <p className="text-white/30 text-xs">Scan to donate via PayPal</p>
+          </div>
         </div>
         <div className="flex gap-2 p-4 bg-black/30 border-t border-white/10">
           <Button variant="secondary" size="md" onClick={onRepeat} className="flex-1">Repeat</Button>

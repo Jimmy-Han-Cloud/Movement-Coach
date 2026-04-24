@@ -89,6 +89,33 @@ export class PhaseEngine {
     this.lastTimestamp = null;
   }
 
+  restart(): void {
+    this.stop();
+    this.state.status = "idle";
+    this.state.elapsedTotal = 0;
+    this.state.currentPhaseIndex = 0;
+    this.phaseStartTotal = 0;
+    this.state.phaseStates = buildInitialPhaseStates(this.state.flow);
+    this.start();
+  }
+
+  pause(): void {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    this.lastTimestamp = null;
+    this.state.status = "paused";
+  }
+
+  resume(): void {
+    if (this.state.status !== "paused") return;
+    if (this.rafId !== null) return;
+    this.state.status = "running";
+    this.lastTimestamp = null;
+    this.rafId = requestAnimationFrame(this.tick);
+  }
+
   /** Called by Module 2 (pose validation) to report validation results for current phase */
   reportValidation(update: {
     participation?: boolean;

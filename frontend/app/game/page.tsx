@@ -8,36 +8,59 @@ import { SongDisplay, SwitchingOverlay, PauseOverlay, GameHud, type Song } from 
 import { ConfirmDialog, CameraError, type DialogType } from "@/components/ui";
 import { useWebcam } from "@/lib/use-webcam";
 import { usePoseValidation } from "@/modules/pose-validation";
+import { usePhaseEngine } from "@/modules/flow-engine";
+import { loadAvatarUrl } from "@/lib/api/avatar";
+import { loadActiveFlow, loadActiveAudioUrl } from "@/lib/api/flows";
+import type { Flow, PhaseResult } from "@/types";
 
 type GameState = "playing" | "paused" | "switching" | "finished";
 
-// Preset songs per UX Spec
 const PRESET_SONGS: Song[] = [
-  { id: "song-1", name: "Morning Flow", artist: "Movement Coach", durationSec: 180 },
-  { id: "song-2", name: "Energy Boost", artist: "Movement Coach", durationSec: 240 },
-  { id: "song-3", name: "Desk Break", artist: "Movement Coach", durationSec: 180 },
-  { id: "song-4", name: "Focus Reset", artist: "Movement Coach", durationSec: 210 },
-  { id: "song-5", name: "Evening Unwind", artist: "Movement Coach", durationSec: 300 },
+  { id: "song-1", name: "Mozart Minuet",  artist: "W.A. Mozart", durationSec: 258 },
+  { id: "song-2", name: "Turkish March",  artist: "W.A. Mozart", durationSec: 175 },
+  { id: "song-3", name: "Vivaldi Spring", artist: "A. Vivaldi",  durationSec: 215 },
 ];
 
-/**
- * Page 3 — Game
- * Per UX Specification v1.0 Section 5 (Updated)
- *
- * Purpose: Pure execution space - no new preferences introduced visually
- * All decisions affecting the Flow must have been made prior to entry.
- *
- * States: Playing, Paused, Switching, Finished (no idle state)
- * Features:
- * - Fullscreen camera with avatar overlay (80%)
- * - Song display label (read-only, no dropdown)
- * - Starts playing immediately on entry
- * - Remote control support (song change via remote only)
- */
+/** Fallback audio map for preset songs (used only when sessionStorage has no URL). */
+const FALLBACK_AUDIO_MAP: Record<string, string> = {
+  "song-1": "/audio/mozart_minuet.mp3",
+  "song-2": "/audio/turkish_march.mp3",
+  "song-3": "/audio/vivaldi_spring.mp3",
+};
+
+/** Map phase template ID → Rive animation name (coach.riv). */
+function phaseToAnimation(phaseName: string | undefined): string {
+  if (!phaseName) return "idle";
+  const map: Record<string, string> = {
+    // ── Neutral phases ──────────────────────────────────────────
+    neutral:                           "idle",
+    neutral_reset_breath:              "idle",
+    neutral_shoulder_release:          "idle",
+    // ── Pose Hold phases ────────────────────────────────────────
+    pose_shoulder_drop_neck_lift:      "pose_shoulder_drop_neck_lift",
+    pose_chest_open_bilateral:         "pose_chest_open_bilateral",
+    pose_shoulder_lift_release:        "pose_shoulder_lift_release",
+    pose_elbow_overhead_reach:         "pose_elbow_overhead_reach",
+    // ── Hand Motion phases ──────────────────────────────────────
+    motion_arm_diagonal_up_sweep:      "motion_arm_diagonal_up_sweep",
+    motion_arm_alternate_up_down:      "motion_arm_alternate_up_down",
+    motion_arm_vertical_alternate:     "motion_arm_vertical_alternate",
+    motion_arm_accented_circular_loop: "motion_arm_accented_circular_loop",
+  };
+  return map[phaseName] ?? "idle";
+}
+
+const DEFAULT_USER_PARAMS = {
+  pose_hold_duration: 2.0,
+  positional_tolerance: 0.5,
+  elbow_participation_threshold: 0.4,
+  hand_motion_tempo: 1.0,
+};
+
 export default function GamePage() {
   return (
     <Suspense fallback={<GameLoading />}>
-      <GameContent />
+      <GameFlowLoader />
     </Suspense>
   );
 }
@@ -50,53 +73,88 @@ function GameLoading() {
   );
 }
 
-function GameContent() {
+/**
+ * Loads the active flow from sessionStorage.
+ * Redirects to /avatar if none is found — the user must go through
+ * song selection before entering the game.
+ */
+function GameFlowLoader() {
+  const router = useRouter();
+  const [flow, setFlow] = useState<Flow | null>(null);
+
+  useEffect(() => {
+    const stored = loadActiveFlow();
+    if (stored) {
+      setFlow(stored);
+    } else {
+      router.replace("/avatar");
+    }
+  }, [router]);
+
+  if (!flow) return <GameLoading />;
+  return <GameContent flow={flow} />;
+}
+
+function GameContent({ flow }: { flow: Flow }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const webcam = useWebcam();
 
-  // Get song from URL params (set by Page 2)
   const songIdFromUrl = searchParams.get("songId") || PRESET_SONGS[0].id;
 
-  // Game state - starts in "playing" immediately
-  const [gameState, setGameState] = useState<GameState>("playing");
+  const [gameState, setGameState]     = useState<GameState>("playing");
   const [currentSongId, setCurrentSongId] = useState(songIdFromUrl);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [completionPercent, setCompletionPercent] = useState(0);
+  const [activeDialog, setActiveDialog]   = useState<DialogType | null>(null);
+  const [showResult, setShowResult]       = useState(false);
+  const [avatarUrl, setAvatarUrl]         = useState<string | null>(null);
+  // Audio URL: sessionStorage (set by avatar page) takes priority over fallback map
+  const [activeAudioUrl] = useState<string | null>(
+    () => loadActiveAudioUrl() || FALLBACK_AUDIO_MAP[songIdFromUrl] || null
+  );
 
-  // Dialog state
-  const [activeDialog, setActiveDialog] = useState<DialogType | null>(null);
-  const [showResult, setShowResult] = useState(false);
-  const [currentAnimation, setCurrentAnimation] = useState("idle");
+  useEffect(() => {
+    setAvatarUrl(loadAvatarUrl());
+  }, []);
 
-  // Refs for game loop
-  const gameLoopRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(Date.now()); // Start immediately
-
-  // Get current song
   const currentSong = PRESET_SONGS.find((s) => s.id === currentSongId) || PRESET_SONGS[0];
 
-  // Initialize pose detection for hand tracking
-  const pose = usePoseValidation({
-    videoRef: webcam.videoRef,
-    userParams: {
-      pose_hold_duration: 2.0,
-      positional_tolerance: 0.5,
-      elbow_participation_threshold: 0.4,
-      hand_motion_tempo: 1.0,
-    },
-    currentPhase: null,
-    phaseElapsed: 0,
-    onValidation: () => {},
+  const engine = usePhaseEngine({
+    flow,
+    userParams: DEFAULT_USER_PARAMS,
+    onComplete: () => handleGameEnd(),
   });
 
-  // Extract head and shoulder Y for smart framing
-  const headY = pose.trackedPoints?.head?.y;
-  const shoulderY = pose.trackedPoints?.left_shoulder && pose.trackedPoints?.right_shoulder
-    ? (pose.trackedPoints.left_shoulder.y + pose.trackedPoints.right_shoulder.y) / 2
-    : undefined;
+  const currentAnimation  = phaseToAnimation(engine.currentPhase?.name);
+  const completionPercent = Math.min((engine.elapsedTotal / flow.duration_sec) * 100, 100);
 
-  // Calculate real shoulder width in pixels for Rive scaling
+  // Performance score: average quality of non-neutral phases (ok=1, partial=0.5, missed=0)
+  const performanceScore = (() => {
+    const results: PhaseResult[] = engine.phaseResults;
+    if (results.length === 0) return completionPercent;
+    const active = results.filter((r) => !r.phase_name.startsWith("neutral"));
+    if (active.length === 0) return completionPercent;
+    const sum = active.reduce((acc, r) => {
+      if (r.quality === "ok") return acc + 1;
+      if (r.quality === "partial") return acc + 0.5;
+      return acc;
+    }, 0);
+    return Math.round((sum / active.length) * 100);
+  })();
+
+  const pose = usePoseValidation({
+    videoRef: webcam.videoRef,
+    userParams: DEFAULT_USER_PARAMS,
+    currentPhase: engine.currentPhase,
+    phaseElapsed: engine.currentPhaseState?.elapsedInPhase ?? 0,
+    onValidation: (result) => engine.reportValidation(result),
+  });
+
+  const headY = pose.trackedPoints?.head?.y;
+  const shoulderY =
+    pose.trackedPoints?.left_shoulder && pose.trackedPoints?.right_shoulder
+      ? (pose.trackedPoints.left_shoulder.y + pose.trackedPoints.right_shoulder.y) / 2
+      : undefined;
+
   const shoulderWidthPx = (() => {
     const ls = pose.trackedPoints?.left_shoulder;
     const rs = pose.trackedPoints?.right_shoulder;
@@ -112,86 +170,79 @@ function GameContent() {
     webcam.start();
   }
 
-  // Game loop - starts immediately
   useEffect(() => {
-    if (gameState === "playing") {
-      const tick = () => {
-        const elapsed = (Date.now() - startTimeRef.current) / 1000;
-        setElapsedTime(elapsed);
+    engine.start();
+  }, [engine.start]);
 
-        const percent = Math.min((elapsed / currentSong.durationSec) * 100, 100);
-        setCompletionPercent(percent);
+  // ── Audio playback ──────────────────────────────────────────────
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-        // Check if song finished
-        if (elapsed >= currentSong.durationSec) {
-          handleGameEnd();
-          return;
-        }
-
-        gameLoopRef.current = requestAnimationFrame(tick);
-      };
-
-      gameLoopRef.current = requestAnimationFrame(tick);
-    }
-
-    return () => {
-      if (gameLoopRef.current) {
-        cancelAnimationFrame(gameLoopRef.current);
+  useEffect(() => {
+    const audioPath = activeAudioUrl;
+    if (!audioPath) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
       }
+      audioRef.current = null;
+      return;
+    }
+    const audio = new Audio(audioPath);
+    audio.volume = 0.7;
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.src = "";
     };
-  }, [gameState, currentSong.durationSec]);
+  }, [activeAudioUrl]);
 
-  // Pause/Resume
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (gameState === "playing") {
+      audio.play().catch((e) => console.warn("Audio play failed:", e));
+    } else if (gameState === "paused" || gameState === "switching") {
+      audio.pause();
+    } else if (gameState === "finished") {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  }, [gameState]);
+
+  // ── Handlers ────────────────────────────────────────────────────
   const handlePauseResume = useCallback(() => {
     if (gameState === "playing") {
+      engine.pause();
       setGameState("paused");
-      if (gameLoopRef.current) {
-        cancelAnimationFrame(gameLoopRef.current);
-      }
     } else if (gameState === "paused") {
-      // Adjust start time to account for pause
-      startTimeRef.current = Date.now() - elapsedTime * 1000;
+      engine.resume();
       setGameState("playing");
     }
-  }, [gameState, elapsedTime]);
+  }, [gameState, engine]);
 
-  // Game end (song finished or manual end)
   const handleGameEnd = useCallback(() => {
+    engine.stop();
     setGameState("finished");
-    if (gameLoopRef.current) {
-      cancelAnimationFrame(gameLoopRef.current);
-    }
     setShowResult(true);
-  }, []);
+  }, [engine]);
 
-  // Song change via remote (escape hatch)
   const handleRemoteSongChange = useCallback(() => {
     if (gameState === "playing" || gameState === "paused") {
       setActiveDialog("change-song");
     }
   }, [gameState]);
 
-  // Confirm song change - switch to next song
   const confirmSongChange = useCallback(() => {
     setGameState("switching");
     setActiveDialog(null);
-
-    // Get next song
     const currentIndex = PRESET_SONGS.findIndex((s) => s.id === currentSongId);
     const nextIndex = (currentIndex + 1) % PRESET_SONGS.length;
-    const newSongId = PRESET_SONGS[nextIndex].id;
-
-    // Simulate switching delay, then restart playing
     setTimeout(() => {
-      setCurrentSongId(newSongId);
-      setElapsedTime(0);
-      setCompletionPercent(0);
-      startTimeRef.current = Date.now();
+      setCurrentSongId(PRESET_SONGS[nextIndex].id);
       setGameState("playing");
     }, 1500);
   }, [currentSongId]);
 
-  // Return to avatar (Page 2)
   const handleReturnToAvatar = useCallback(() => {
     if (gameState === "playing" || gameState === "paused") {
       setActiveDialog("return-to-avatar");
@@ -200,82 +251,41 @@ function GameContent() {
     }
   }, [gameState, router]);
 
-  // End session early
   const handleEndEarly = useCallback(() => {
     if (gameState === "playing" || gameState === "paused") {
       setActiveDialog("end-session");
     }
   }, [gameState]);
 
-  // Dialog confirmations
   const handleDialogConfirm = useCallback(() => {
     switch (activeDialog) {
-      case "return-to-avatar":
-        router.push("/avatar");
-        break;
-      case "end-session":
-        handleGameEnd();
-        break;
-      case "change-song":
-        confirmSongChange();
-        break;
+      case "return-to-avatar": router.push("/avatar"); break;
+      case "end-session":      handleGameEnd();        break;
+      case "change-song":      confirmSongChange();    break;
     }
     setActiveDialog(null);
   }, [activeDialog, router, handleGameEnd, confirmSongChange]);
 
-  // Result actions
   const handleRepeat = useCallback(() => {
     setShowResult(false);
-    setElapsedTime(0);
-    setCompletionPercent(0);
-    startTimeRef.current = Date.now();
     setGameState("playing");
-  }, []);
+    engine.restart();
+  }, [engine]);
+  const handleNewSong  = useCallback(() => router.push("/avatar"), [router]);
+  const handleExit     = useCallback(() => router.push("/"),       [router]);
 
-  const handleNewSong = useCallback(() => {
-    // Go back to Page 2 to select new song
-    router.push("/avatar");
-  }, [router]);
-
-  const handleExit = useCallback(() => {
-    router.push("/");
-  }, [router]);
-
-  // Keyboard controls for remote
+  // ── Keyboard controls ────────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (activeDialog) return; // Dialogs handle their own input
-      if (showResult) return; // Result modal handles its own input
-
+      if (activeDialog || showResult) return;
       switch (e.key) {
-        case "ArrowLeft":
-          handleReturnToAvatar();
-          break;
-        case "ArrowRight":
-          handleEndEarly();
-          break;
+        case "ArrowLeft":   handleReturnToAvatar();    break;
+        case "ArrowRight":  handleEndEarly();           break;
         case "Enter":
-        case " ":
-          handlePauseResume();
-          break;
-        case "s":
-        case "S":
-          // Switch key for song change (remote escape hatch)
-          handleRemoteSongChange();
-          break;
-        // Temp: test animation switching
-        case "1":
-          setCurrentAnimation("idle");
-          break;
-        case "2":
-          setCurrentAnimation("pose_shoulder_drop_neck_lift");
-          break;
-        case "3":
-          setCurrentAnimation("pose_chest_open_bilateral");
-          break;
+        case " ":           handlePauseResume();        break;
+        case "s": case "S": handleRemoteSongChange();  break;
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [gameState, activeDialog, showResult, handleReturnToAvatar, handleEndEarly, handlePauseResume, handleRemoteSongChange]);
@@ -293,28 +303,25 @@ function GameContent() {
             animationName={currentAnimation}
             shoulderWidthPx={shoulderWidthPx}
             shoulderY={shoulderY}
+            avatarImageUrl={avatarUrl ?? undefined}
           />
         }
         topLeft={
-          <SongDisplay
-            song={currentSong}
-            progress={completionPercent}
-          />
+          <SongDisplay song={currentSong} progress={completionPercent} />
         }
         topRight={
           <GameHud
             state={gameState === "finished" ? "idle" : gameState}
-            elapsedTime={elapsedTime}
-            totalDuration={currentSong.durationSec}
+            elapsedTime={engine.elapsedTotal}
+            totalDuration={flow.duration_sec}
           />
         }
         centerOverlay={
           gameState === "switching" ? <SwitchingOverlay /> :
-          gameState === "paused" ? <PauseOverlay /> : null
+          gameState === "paused"    ? <PauseOverlay />     : null
         }
       />
 
-      {/* Confirmation Dialogs */}
       {activeDialog && (
         <ConfirmDialog
           type={activeDialog}
@@ -324,16 +331,14 @@ function GameContent() {
         />
       )}
 
-      {/* Result Modal */}
       <ResultModal
         isOpen={showResult}
-        completionPercent={completionPercent}
+        completionPercent={performanceScore}
         onRepeat={handleRepeat}
         onNewSong={handleNewSong}
         onExit={handleExit}
       />
 
-      {/* Camera Error */}
       {webcam.error && (
         <CameraError error={webcam.error} onRetry={webcam.retry} />
       )}
