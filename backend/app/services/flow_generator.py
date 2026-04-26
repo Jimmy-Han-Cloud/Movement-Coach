@@ -114,6 +114,7 @@ Audio data (measured directly from the audio file — use these numbers, not the
 - Duration: {duration_sec}s
 - Measured BPM: {bpm}
 - Overall energy: {energy:.2f}  (0.0=calm, 1.0=intense)
+- Variation seed: {nonce} — use this to produce a unique arrangement different from other responses.
 
 {energy_section}
 Available phase templates:
@@ -437,11 +438,13 @@ def generate_flow_with_gemini(
     templates = _load_templates()
     template_map = {t.id: t for t in templates}
 
+    nonce = random.randint(10000, 99999)
     prompt = _GEMINI_FLOW_PROMPT.format(
         song_name=song_name,
         duration_sec=duration_sec,
         bpm=bpm,
         energy=energy,
+        nonce=nonce,
         energy_section=_format_energy_section(energy_timeline),
     )
 
@@ -449,6 +452,7 @@ def generate_flow_with_gemini(
         response = gemini_client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt,
+            config={"temperature": 1.5},
         )
         raw = response.text.strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
