@@ -388,9 +388,9 @@ export default function AvatarSetupPage() {
   const isUploadSlot = avatarState === "selecting-song" &&
     PRESET_SONGS[currentSongIndex].id === UPLOAD_SONG_ID;
 
-  // GoBubble disabled for upload slot until a file has been picked
+  // GoBubble disabled for upload slot until a file has been picked and analyzed
   const goBubbleDisabled = avatarState !== "selecting-song" ||
-    (isUploadSlot && !uploadedFile);
+    (isUploadSlot && (!uploadedFile || analyzingAudio));
 
   // ── Keyboard controls ───────────────────────────────────────────
 
