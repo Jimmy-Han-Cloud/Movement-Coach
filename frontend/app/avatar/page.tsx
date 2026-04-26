@@ -13,6 +13,8 @@ import { useCheckmarkGesture } from "@/lib/use-checkmark-gesture";
 import { generateFlowForSong, saveActiveFlow, saveActiveAudioUrl, saveActiveSong, buildFallbackFlow, saveFlowForSong, loadFlowForSong } from "@/lib/api/flows";
 import { saveCoachRiv } from "@/lib/api/avatar";
 import { triggerBurst, startRain, stopRain } from "@/lib/sakura-burst";
+import { triggerDandelionBurst, startDandelionFloat, stopDandelionFloat } from "@/lib/dandelion-float";
+import { triggerBubbleBurst, startFishOcean, stopFishOcean } from "@/lib/fish-ocean";
 import { analyzeAudio, type AudioFeatures } from "@/lib/analyze-audio";
 
 /**
@@ -299,8 +301,23 @@ export default function AvatarSetupPage() {
     const rect = goBubbleRef.current?.getBoundingClientRect();
     const burstX = rect ? rect.left + rect.width  / 2 : window.innerWidth  * 0.9;
     const burstY = rect ? rect.top  + rect.height / 2 : window.innerHeight * 0.5;
-    triggerBurst(burstX, burstY);
-    const rainTimeout = setTimeout(startRain, 3000);
+    // Each coach has its own waiting background animation
+    const coachIdx = currentCharacterIndex;
+    let bgStop: () => void;
+    let bgTimeout: ReturnType<typeof setTimeout>;
+    if (coachIdx === 0) {
+      triggerDandelionBurst(burstX, burstY);
+      bgTimeout = setTimeout(startDandelionFloat, 1800);
+      bgStop = stopDandelionFloat;
+    } else if (coachIdx === 1) {
+      triggerBubbleBurst(burstX, burstY);
+      bgTimeout = setTimeout(startFishOcean, 1200);
+      bgStop = stopFishOcean;
+    } else {
+      triggerBurst(burstX, burstY);
+      bgTimeout = setTimeout(startRain, 3000);
+      bgStop = stopRain;
+    }
 
     // Stop any playing preview
     if (previewAudioRef.current) {
@@ -357,8 +374,8 @@ export default function AvatarSetupPage() {
     ]);
 
     saveActiveFlow(flow);
-    clearTimeout(rainTimeout);
-    stopRain();
+    clearTimeout(bgTimeout);
+    bgStop();
     router.push(`/game?songId=${selectedSong.id}`);
   }, [avatarState, currentSongIndex, uploadedFile, uploadedBlobUrl, uploadedDuration, uploadedFeatures, router]);
 
