@@ -57,12 +57,25 @@ export function RiveCoach({
 
   useEffect(() => {
     if (!rive) return;
-    // Stop only the previous animation (not all) to avoid a blank frame.
     if (prevAnimRef.current !== animationName) {
       rive.stop(prevAnimRef.current);
       prevAnimRef.current = animationName;
+
+      if (animationName === "idle") {
+        rive.play("idle");
+      } else {
+        // Play one frame of idle to reset all bones to rest position,
+        // then immediately switch to the target animation.
+        // This prevents bone state from bleeding between animations.
+        rive.play("idle");
+        requestAnimationFrame(() => {
+          rive.stop("idle");
+          rive.play(animationName);
+        });
+      }
+    } else {
+      rive.play(animationName);
     }
-    rive.play(animationName);
   }, [rive, animationName]);
 
   // Apply EMA smoothing directly in render (safe: refs don't trigger re-render)
