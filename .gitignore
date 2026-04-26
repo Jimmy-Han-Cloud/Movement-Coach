@@ -2,8 +2,8 @@
 .DS_Store
 **/.DS_Store
 
-# audio files
-**/*.mp3
+# test audio files at repo root only
+/*.mp3
 
 # internal docs (keep only root README.md)
 *.md
