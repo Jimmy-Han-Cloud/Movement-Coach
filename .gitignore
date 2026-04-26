@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# scratch / test audio at repo root
+*.mp3
+
+# scratch design assets at repo root
+avatar-body.svg
+avatar-face-placeholder.svg
+bone-guide.svg
+
+# Claude Code settings
+.claude/settings.local.json
