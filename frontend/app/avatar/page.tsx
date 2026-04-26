@@ -94,6 +94,7 @@ export default function AvatarSetupPage() {
   const [uploadedDuration, setUploadedDuration] = useState(0);
   const [uploadedFeatures, setUploadedFeatures] = useState<AudioFeatures | null>(null);
   const [analyzingAudio, setAnalyzingAudio]     = useState(false);
+  const analysisPromiseRef = useRef<Promise<AudioFeatures | null>>(Promise.resolve(null));
   const fileInputRef  = useRef<HTMLInputElement>(null);
   const goBubbleRef   = useRef<HTMLDivElement>(null);
 
@@ -184,10 +185,11 @@ export default function AvatarSetupPage() {
 
     // Analyze audio features in the background (BPM + energy)
     setAnalyzingAudio(true);
-    analyzeAudio(blobUrl)
-      .then((features) => setUploadedFeatures(features))
-      .catch((err) => console.warn("Audio analysis failed:", err))
+    const promise = analyzeAudio(blobUrl)
+      .then((features) => { setUploadedFeatures(features); return features; })
+      .catch((err) => { console.warn("Audio analysis failed:", err); return null; })
       .finally(() => setAnalyzingAudio(false));
+    analysisPromiseRef.current = promise;
   }, [uploadedBlobUrl]);
 
   // ── Pose detection ──────────────────────────────────────────────
@@ -324,8 +326,10 @@ export default function AvatarSetupPage() {
     const isUpload = selectedSong.id === UPLOAD_SONG_ID;
 
     // Preset songs: flow is pre-seeded in Firestore — just pass song_id, no analysis needed.
-    // Uploaded songs: pass real BPM/energy from browser analysis so Gemini can orchestrate.
-    const audioFeatures = isUpload ? (uploadedFeatures ?? undefined) : undefined;
+    // Uploaded songs: await analysis if still running (cherry blossom rain covers the wait).
+    const audioFeatures = isUpload
+      ? ((await analysisPromiseRef.current) ?? undefined)
+      : undefined;
     const songId = isUpload ? undefined : selectedSong.id;
 
     // Preset songs: check sessionStorage before hitting the network.
@@ -388,9 +392,9 @@ export default function AvatarSetupPage() {
   const isUploadSlot = avatarState === "selecting-song" &&
     PRESET_SONGS[currentSongIndex].id === UPLOAD_SONG_ID;
 
-  // GoBubble disabled for upload slot until a file has been picked and analyzed
+  // GoBubble disabled for upload slot until a file has been picked
   const goBubbleDisabled = avatarState !== "selecting-song" ||
-    (isUploadSlot && (!uploadedFile || analyzingAudio));
+    (isUploadSlot && !uploadedFile);
 
   // ── Keyboard controls ───────────────────────────────────────────
 
