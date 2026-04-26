@@ -352,7 +352,6 @@ export default function AvatarSetupPage() {
       new Promise<void>((r) => setTimeout(r, 2000)),
     ]);
 
-    console.log("🎵 Generated flow:", JSON.stringify(flow, null, 2));
     saveActiveFlow(flow);
     clearTimeout(rainTimeout);
     stopRain();
