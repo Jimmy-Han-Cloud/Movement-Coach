@@ -132,15 +132,15 @@ export function triggerDandelionBurst(cx: number, cy: number) {
   const ring = document.createElement("div");
   ring.style.cssText = [
     "position:fixed", `left:${cx}px`, `top:${cy}px`,
-    "width:50px", "height:50px", "border-radius:50%",
-    "border:2px solid rgba(240,228,200,0.85)",
+    "width:100px", "height:100px", "border-radius:50%",
+    "border:3px solid rgba(240,228,200,0.85)",
     "pointer-events:none", "z-index:2",
   ].join(";");
   document.body.append(ring);
   ring.animate([
     { transform: "translate(-50%,-50%) scale(1)", opacity: 1 },
     { transform: "translate(-50%,-50%) scale(5.5)", opacity: 0 },
-  ], { duration: 480, easing: "ease-out", fill: "forwards" }).onfinish = () => ring.remove();
+  ], { duration: 560, easing: "ease-out", fill: "forwards" }).onfinish = () => ring.remove();
 
   // 80 seeds, biased upward
   for (let i = 0; i < 80; i++) {
@@ -161,10 +161,10 @@ export function startDandelionFloat() {
   }, 2200);
   let tick = 0;
   _floatTimer = setInterval(() => {
-    const count = tick < 12 ? 2 : 1;
+    const count = tick < 15 ? 5 : 3;
     for (let i = 0; i < count; i++) spawnFloatSeed();
     tick++;
-  }, 260);
+  }, 200);
 }
 
 /** Stop float and remove all in-flight seeds. */
