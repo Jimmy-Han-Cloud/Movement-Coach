@@ -1,0 +1,253 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 480" width="400" height="480">
+  <!--
+    Chibi character SVG — female, light skin, lavender wavy hair
+    Bone anchor points (match Rive artboard exactly):
+      Head center:      (200, 155)  r≈80
+      Shoulder left:    (132, 295)
+      Shoulder right:   (268, 295)
+      Elbow left:       (120, 378)
+      Elbow right:      (280, 378)
+
+    Group IDs map to Rive bones:
+      #hair_back   — behind head, no bone needed (child of torso or root)
+      #head        — bind to head bone
+      #neck        — connect head to torso
+      #torso       — bind to spine/root bone
+      #arm_upper_L — bind to upper_arm_L bone  (132,295 → 120,378)
+      #arm_lower_L — bind to lower_arm_L bone  (120,378 → hand)
+      #arm_upper_R — bind to upper_arm_R bone  (268,295 → 280,378)
+      #arm_lower_R — bind to lower_arm_R bone  (280,378 → hand)
+  -->
+
+  <!-- ═══════════════════════════════════════════════════
+       HAIR BACK — drawn first so it sits behind the face
+  ════════════════════════════════════════════════════ -->
+  <g id="hair_back">
+    <!-- left back curtain -->
+    <path d="M 148 135 Q 118 180 112 240 Q 108 290 118 330"
+          fill="none" stroke="#B584D4" stroke-width="32" stroke-linecap="round"/>
+    <!-- right back curtain -->
+    <path d="M 252 135 Q 282 180 288 240 Q 292 290 282 330"
+          fill="none" stroke="#B584D4" stroke-width="32" stroke-linecap="round"/>
+    <!-- bottom of back hair -->
+    <path d="M 124 270 Q 128 315 135 340" fill="none" stroke="#A870C8" stroke-width="22" stroke-linecap="round"/>
+    <path d="M 276 270 Q 272 315 265 340" fill="none" stroke="#A870C8" stroke-width="22" stroke-linecap="round"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       ARMS — drawn before torso so torso overlaps at shoulder
+  ════════════════════════════════════════════════════ -->
+
+  <!-- Left upper arm: shoulder (132,295) → elbow (120,378) -->
+  <g id="arm_upper_L">
+    <line x1="132" y1="295" x2="120" y2="378"
+          stroke="#FF8FAE" stroke-width="28" stroke-linecap="round"/>
+  </g>
+
+  <!-- Left lower arm + hand: elbow (120,378) → hand (~112,440) -->
+  <g id="arm_lower_L">
+    <line x1="120" y1="378" x2="112" y2="440"
+          stroke="#FF9FBC" stroke-width="22" stroke-linecap="round"/>
+    <!-- cuff detail -->
+    <line x1="118" y1="382" x2="110" y2="404"
+          stroke="#F07098" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+    <!-- hand -->
+    <ellipse cx="110" cy="446" rx="16" ry="13" fill="#FFDECB" stroke="#E8B090" stroke-width="1.5"/>
+    <!-- finger lines -->
+    <path d="M 98 440 Q 96 433 100 430" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 105 438 Q 103 430 107 427" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 112 437 Q 111 429 115 427" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 119 438 Q 119 430 122 430" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Right upper arm: shoulder (268,295) → elbow (280,378) -->
+  <g id="arm_upper_R">
+    <line x1="268" y1="295" x2="280" y2="378"
+          stroke="#FF8FAE" stroke-width="28" stroke-linecap="round"/>
+  </g>
+
+  <!-- Right lower arm + hand: elbow (280,378) → hand (~288,440) -->
+  <g id="arm_lower_R">
+    <line x1="280" y1="378" x2="288" y2="440"
+          stroke="#FF9FBC" stroke-width="22" stroke-linecap="round"/>
+    <!-- cuff detail -->
+    <line x1="282" y1="382" x2="290" y2="404"
+          stroke="#F07098" stroke-width="4" stroke-linecap="round" opacity="0.5"/>
+    <!-- hand -->
+    <ellipse cx="290" cy="446" rx="16" ry="13" fill="#FFDECB" stroke="#E8B090" stroke-width="1.5"/>
+    <!-- finger lines -->
+    <path d="M 302 440 Q 304 433 300 430" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 295 438 Q 297 430 293 427" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 288 437 Q 289 429 285 427" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 281 438 Q 281 430 278 430" fill="none" stroke="#D49070" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       TORSO — pink hoodie body
+       Shoulders at L:(132,295) R:(268,295)
+  ════════════════════════════════════════════════════ -->
+  <g id="torso">
+    <!-- main hoodie body -->
+    <path d="M 128 292
+             Q 112 310 110 360 Q 108 410 114 445
+             Q 155 458 200 460 Q 245 458 286 445
+             Q 292 410 290 360 Q 288 310 272 292
+             Q 248 280 200 278 Q 152 280 128 292 Z"
+          fill="#FF8FAE" stroke="#E0708E" stroke-width="2"/>
+    <!-- hoodie center seam -->
+    <path d="M 200 285 L 200 460" stroke="#E0708E" stroke-width="1" opacity="0.4"/>
+    <!-- kangaroo pocket -->
+    <rect x="168" y="368" width="64" height="46" rx="10"
+          fill="#FF7AA0" stroke="#D06080" stroke-width="1.5"/>
+    <!-- pocket stitch line -->
+    <rect x="171" y="371" width="58" height="40" rx="8"
+          fill="none" stroke="#E8899E" stroke-width="1" opacity="0.6"/>
+    <!-- drawstring cords (from hood behind neck) -->
+    <path d="M 188 286 Q 186 305 186 322 L 183 326" stroke="#D06080" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M 212 286 Q 214 305 214 322 L 217 326" stroke="#D06080" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- drawstring tips (little balls) -->
+    <circle cx="183" cy="329" r="3" fill="#C04060"/>
+    <circle cx="217" cy="329" r="3" fill="#C04060"/>
+    <!-- collar ribbing arc -->
+    <path d="M 170 283 Q 200 296 230 283" fill="none" stroke="#E0708E" stroke-width="2" stroke-linecap="round"/>
+    <!-- bottom ribbing -->
+    <path d="M 114 443 Q 200 462 286 443" fill="none" stroke="#E0708E" stroke-width="2.5"/>
+    <!-- shoulder seam lines -->
+    <path d="M 130 292 Q 142 288 156 286" fill="none" stroke="#E8899E" stroke-width="1" opacity="0.5"/>
+    <path d="M 270 292 Q 258 288 244 286" fill="none" stroke="#E8899E" stroke-width="1" opacity="0.5"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       NECK — connects head to torso
+  ════════════════════════════════════════════════════ -->
+  <g id="neck">
+    <rect x="183" y="232" width="34" height="58" rx="14"
+          fill="#FFDECB" stroke="#E8B090" stroke-width="1.2"/>
+    <!-- subtle shadow on neck -->
+    <path d="M 187 238 Q 200 244 213 238" fill="none" stroke="#E8B090" stroke-width="1" opacity="0.5"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════════════════
+       HEAD — bone pivot at (200, 155)
+       Face + front hair all in one group
+  ════════════════════════════════════════════════════ -->
+  <g id="head">
+
+    <!-- ── Face base ── -->
+    <ellipse cx="200" cy="160" rx="78" ry="82"
+             fill="#FFDECB" stroke="#E8B090" stroke-width="1.5"/>
+    <!-- subtle jaw shadow -->
+    <ellipse cx="200" cy="210" rx="55" ry="18" fill="#E8B090" opacity="0.15"/>
+
+    <!-- ── Blush cheeks ── -->
+    <ellipse cx="148" cy="182" rx="20" ry="13" fill="#FFB3C6" opacity="0.55"/>
+    <ellipse cx="252" cy="182" rx="20" ry="13" fill="#FFB3C6" opacity="0.55"/>
+
+    <!-- ── Left eye ── -->
+    <!-- white sclera -->
+    <ellipse cx="169" cy="158" rx="18" ry="21" fill="white" stroke="#D0A0D0" stroke-width="0.8"/>
+    <!-- iris -->
+    <ellipse cx="169" cy="160" rx="13" ry="16" fill="#8B5CC8"/>
+    <!-- pupil -->
+    <ellipse cx="169" cy="161" rx="8"  ry="10" fill="#2D1050"/>
+    <!-- main sparkle -->
+    <ellipse cx="162" cy="153" rx="4"  ry="5"  fill="white" opacity="0.95"/>
+    <!-- secondary sparkle -->
+    <ellipse cx="175" cy="168" rx="2.5" ry="2.5" fill="white" opacity="0.7"/>
+    <!-- upper eyelid thick stroke -->
+    <path d="M 151 148 Q 169 140 187 148"
+          fill="none" stroke="#4A1A80" stroke-width="3" stroke-linecap="round"/>
+    <!-- lower lash line -->
+    <path d="M 153 170 Q 169 178 185 170"
+          fill="none" stroke="#4A1A80" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+    <!-- eyelashes (left eye, top) -->
+    <path d="M 152 150 L 148 143" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 158 146 L 156 139" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 180 146 L 183 139" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 186 149 L 190 143" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- ── Right eye (mirrored) ── -->
+    <ellipse cx="231" cy="158" rx="18" ry="21" fill="white" stroke="#D0A0D0" stroke-width="0.8"/>
+    <ellipse cx="231" cy="160" rx="13" ry="16" fill="#8B5CC8"/>
+    <ellipse cx="231" cy="161" rx="8"  ry="10" fill="#2D1050"/>
+    <ellipse cx="224" cy="153" rx="4"  ry="5"  fill="white" opacity="0.95"/>
+    <ellipse cx="237" cy="168" rx="2.5" ry="2.5" fill="white" opacity="0.7"/>
+    <path d="M 213 148 Q 231 140 249 148"
+          fill="none" stroke="#4A1A80" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 215 170 Q 231 178 247 170"
+          fill="none" stroke="#4A1A80" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+    <path d="M 248 150 L 252 143" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 242 146 L 244 139" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 220 146 L 217 139" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M 214 149 L 210 143" stroke="#3A0E6A" stroke-width="1.5" stroke-linecap="round"/>
+
+    <!-- ── Nose (tiny, delicate) ── -->
+    <path d="M 196 180 Q 200 186 204 180"
+          fill="none" stroke="#D49070" stroke-width="2" stroke-linecap="round"/>
+
+    <!-- ── Mouth ── -->
+    <!-- upper lip line -->
+    <path d="M 188 197 Q 196 195 200 198 Q 204 195 212 197"
+          fill="none" stroke="#C87060" stroke-width="1.5" stroke-linecap="round"/>
+    <!-- smile -->
+    <path d="M 186 200 Q 200 215 214 200"
+          fill="none" stroke="#C87060" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- cute tooth hint -->
+    <path d="M 197 200 L 197 208" stroke="#E8D0C0" stroke-width="2" opacity="0.5"/>
+    <path d="M 203 200 L 203 208" stroke="#E8D0C0" stroke-width="2" opacity="0.5"/>
+
+    <!-- ── FRONT HAIR (drawn on top of face) ── -->
+
+    <!-- Side hair pieces (frame the face) -->
+    <path d="M 127 130 Q 118 170 122 210 Q 120 200 128 235"
+          fill="none" stroke="#C090DC" stroke-width="16" stroke-linecap="round"/>
+    <path d="M 273 130 Q 282 170 278 210 Q 280 200 272 235"
+          fill="none" stroke="#C090DC" stroke-width="16" stroke-linecap="round"/>
+
+    <!-- Bangs — layered wavy style -->
+    <!-- back layer of bangs (slightly darker) -->
+    <path d="M 127 118
+             Q 138 82 165 78 Q 200 73 235 78 Q 262 82 273 118
+             Q 266 102 258 112 Q 248 96 237 108
+             Q 226 92 214 105 Q 207 88 200 92
+             Q 193 88 186 105 Q 174 92 163 108
+             Q 152 96 142 112 Q 134 102 127 118 Z"
+          fill="#B080CC"/>
+    <!-- front layer of bangs (lighter, on top) -->
+    <path d="M 130 122
+             Q 140 90 165 86 Q 200 80 235 86 Q 260 90 270 122
+             Q 262 108 254 116 Q 244 100 234 112
+             Q 224 98 213 108 Q 207 93 200 97
+             Q 193 93 187 108 Q 176 98 166 112
+             Q 156 100 146 116 Q 138 108 130 122 Z"
+          fill="#CC9EE8" stroke="#B080CC" stroke-width="1"/>
+
+    <!-- Crown volume (top of head hair) -->
+    <path d="M 132 116
+             Q 142 72 200 66 Q 258 72 268 116
+             Q 258 88 240 84 Q 222 78 200 80
+             Q 178 78 160 84 Q 142 88 132 116 Z"
+          fill="#CC9EE8" stroke="#B080CC" stroke-width="1"/>
+
+    <!-- Hair highlight sheen -->
+    <path d="M 178 72 Q 200 68 222 72 Q 214 76 200 77 Q 186 76 178 72"
+          fill="white" opacity="0.25"/>
+    <path d="M 170 80 Q 184 76 196 78" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+
+    <!-- Small wavy accent strands on the side hair -->
+    <path d="M 120 170 Q 115 185 118 200" fill="none" stroke="#A870C8" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+    <path d="M 280 170 Q 285 185 282 200" fill="none" stroke="#A870C8" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+
+  </g><!-- end #head -->
+
+  <!--
+    BONE ANCHOR REFERENCE DOTS (delete before production)
+    Uncomment to verify positions when importing into Rive:
+  <circle cx="200" cy="155" r="5" fill="red" opacity="0.5"/>
+  <circle cx="132" cy="295" r="5" fill="blue" opacity="0.5"/>
+  <circle cx="268" cy="295" r="5" fill="blue" opacity="0.5"/>
+  <circle cx="120" cy="378" r="5" fill="green" opacity="0.5"/>
+  <circle cx="280" cy="378" r="5" fill="green" opacity="0.5"/>
+  -->
+
+</svg>

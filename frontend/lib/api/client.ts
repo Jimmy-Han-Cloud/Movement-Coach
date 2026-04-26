@@ -16,6 +16,7 @@ export function setDebugUserId(userId: string) {
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
+  timeoutMs = 8000,
 ): Promise<T> {
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
@@ -35,10 +36,19 @@ export async function apiFetch<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!res.ok) {
     const detail = await res.json().catch(() => ({}));

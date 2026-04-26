@@ -42,7 +42,7 @@ def generate_summary(phase_results: list[PhaseResult], duration_sec: float) -> s
     )
 
     response = _client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
     )
     return response.text.strip()

@@ -4,13 +4,13 @@ import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CameraLayout, ResultModal } from "@/components/layouts";
 import { RiveCoach } from "@/components/avatar/rive-coach";
-import { SongDisplay, SwitchingOverlay, PauseOverlay, GameHud, type Song } from "@/components/game";
+import { SongDisplay, SwitchingOverlay, PauseOverlay, GameHud, FlowTimeline, type Song } from "@/components/game";
 import { ConfirmDialog, CameraError, type DialogType } from "@/components/ui";
 import { useWebcam } from "@/lib/use-webcam";
 import { usePoseValidation } from "@/modules/pose-validation";
 import { usePhaseEngine } from "@/modules/flow-engine";
-import { loadAvatarUrl } from "@/lib/api/avatar";
-import { loadActiveFlow, loadActiveAudioUrl } from "@/lib/api/flows";
+import { loadAvatarUrl, loadCoachRiv } from "@/lib/api/avatar";
+import { loadActiveFlow, loadActiveAudioUrl, loadActiveSong } from "@/lib/api/flows";
 import type { Flow, PhaseResult } from "@/types";
 
 type GameState = "playing" | "paused" | "switching" | "finished";
@@ -80,16 +80,13 @@ function GameLoading() {
  */
 function GameFlowLoader() {
   const router = useRouter();
-  const [flow, setFlow] = useState<Flow | null>(null);
+  // Lazy init reads sessionStorage once on mount — no effect needed, avoids
+  // re-creating the flow object on every render (which would reset the engine).
+  const [flow] = useState<Flow | null>(loadActiveFlow);
 
   useEffect(() => {
-    const stored = loadActiveFlow();
-    if (stored) {
-      setFlow(stored);
-    } else {
-      router.replace("/avatar");
-    }
-  }, [router]);
+    if (!flow) router.replace("/avatar");
+  }, [flow, router]);
 
   if (!flow) return <GameLoading />;
   return <GameContent flow={flow} />;
@@ -107,6 +104,7 @@ function GameContent({ flow }: { flow: Flow }) {
   const [activeDialog, setActiveDialog]   = useState<DialogType | null>(null);
   const [showResult, setShowResult]       = useState(false);
   const [avatarUrl, setAvatarUrl]         = useState<string | null>(null);
+  const [coachRiv]                        = useState<string>(loadCoachRiv);
   // Audio URL: sessionStorage (set by avatar page) takes priority over fallback map
   const [activeAudioUrl] = useState<string | null>(
     () => loadActiveAudioUrl() || FALLBACK_AUDIO_MAP[songIdFromUrl] || null
@@ -116,7 +114,14 @@ function GameContent({ flow }: { flow: Flow }) {
     setAvatarUrl(loadAvatarUrl());
   }, []);
 
-  const currentSong = PRESET_SONGS.find((s) => s.id === currentSongId) || PRESET_SONGS[0];
+  // Resolve current song: sessionStorage metadata takes priority (handles uploaded songs)
+  const currentSong: Song = (() => {
+    const preset = PRESET_SONGS.find((s) => s.id === currentSongId);
+    if (preset) return preset;
+    const saved = loadActiveSong();
+    if (saved) return { id: currentSongId, name: saved.name, artist: saved.artist, durationSec: saved.durationSec };
+    return PRESET_SONGS[0];
+  })();
 
   const engine = usePhaseEngine({
     flow,
@@ -125,6 +130,7 @@ function GameContent({ flow }: { flow: Flow }) {
   });
 
   const currentAnimation  = phaseToAnimation(engine.currentPhase?.name);
+  const timelineActiveIndex = engine.currentPhaseIndex;
   const completionPercent = Math.min((engine.elapsedTotal / flow.duration_sec) * 100, 100);
 
   // Performance score: average quality of non-neutral phases (ok=1, partial=0.5, missed=0)
@@ -218,13 +224,13 @@ function GameContent({ flow }: { flow: Flow }) {
       engine.resume();
       setGameState("playing");
     }
-  }, [gameState, engine]);
+  }, [gameState, engine.pause, engine.resume]);
 
   const handleGameEnd = useCallback(() => {
     engine.stop();
     setGameState("finished");
     setShowResult(true);
-  }, [engine]);
+  }, [engine.stop]);
 
   const handleRemoteSongChange = useCallback(() => {
     if (gameState === "playing" || gameState === "paused") {
@@ -270,7 +276,7 @@ function GameContent({ flow }: { flow: Flow }) {
     setShowResult(false);
     setGameState("playing");
     engine.restart();
-  }, [engine]);
+  }, [engine.restart]);
   const handleNewSong  = useCallback(() => router.push("/avatar"), [router]);
   const handleExit     = useCallback(() => router.push("/"),       [router]);
 
@@ -298,9 +304,16 @@ function GameContent({ flow }: { flow: Flow }) {
         headY={headY}
         shoulderY={shoulderY}
         dimmed={!!activeDialog || showResult || gameState === "paused"}
+        topCenter={
+          <FlowTimeline
+            phases={flow.phases}
+            currentPhaseIndex={timelineActiveIndex}
+          />
+        }
         avatarOverlay={
           <RiveCoach
             animationName={currentAnimation}
+            rivSrc={coachRiv}
             shoulderWidthPx={shoulderWidthPx}
             shoulderY={shoulderY}
             avatarImageUrl={avatarUrl ?? undefined}

@@ -109,12 +109,13 @@ def _plan_sequence(
 _GEMINI_FLOW_PROMPT = """\
 You are a movement coach flow designer for a desk worker wellness app.
 
-Audio data:
-- Song: {song_name}
+Audio data (measured directly from the audio file — use these numbers, not the name):
+- Reference name: {song_name}
 - Duration: {duration_sec}s
 - Measured BPM: {bpm}
-- Measured energy: {energy:.2f}  (0.0=calm, 1.0=intense)
+- Overall energy: {energy:.2f}  (0.0=calm, 1.0=intense)
 
+{energy_section}
 Available phase templates:
 
 NEUTRAL (use for opening and closing only):
@@ -135,7 +136,7 @@ HAND_MOTION (continuous movement sequences):
 
 Design rules:
 1. First phase: one NEUTRAL, exactly 3 seconds.
-2. Second phase: one HAND_MOTION, 8–10 seconds. (REQUIRED — shows movement immediately)
+2. Second phase: MUST be one HAND_MOTION, 8–10 seconds. MANDATORY — the first non-neutral phase must ALWAYS be a HAND_MOTION, never a POSE_HOLD. No exceptions.
 3. Core rhythm: HAND_MOTION (15–30s) → POSE_HOLD (~10s recovery) → HAND_MOTION → POSE_HOLD → …
    After every HAND_MOTION phase, always insert a POSE_HOLD of 8–12 seconds before the next HAND_MOTION.
    No two HAND_MOTION phases may appear back-to-back without a POSE_HOLD between them.
@@ -152,6 +153,14 @@ Design rules:
 10. High energy (≥0.65) → favour shorter durations; use more repetitions to fill time.
 11. Low energy (≤0.40) → slightly longer individual durations; still include all templates.
 12. NEUTRAL phases appear only at the very start (rule 1) and very end (rule 4). Never insert NEUTRAL in the core.
+13. If an energy timeline is provided, align phase intensity with the local window energy:
+    - Window energy ≥ 0.65 → that time slot should contain HAND_MOTION (active).
+    - Window energy ≤ 0.40 → that time slot should contain POSE_HOLD (recovery) or be shorter.
+    - Window energy in between → follow the standard HAND_MOTION → POSE_HOLD rhythm.
+    The timeline reflects real audio dynamics; it takes precedence over the global energy value
+    for local phase decisions. Do not beat-match — align at the 15-second window level only.
+14. Base every decision on the measured audio data above. The reference name is unreliable
+    (user uploads may have arbitrary filenames); never infer energy or style from the name.
 
 Output ONLY a JSON object — no markdown, no prose:
 {{
@@ -270,21 +279,24 @@ def _cap_neutral_duration(phases_data: list[dict], max_sec: int = 3) -> list[dic
 
 
 def _ensure_early_motion(phases_data: list[dict]) -> list[dict]:
-    """Guarantee a HAND_MOTION appears within 10s of the session start.
+    """Guarantee the first non-neutral phase is always a HAND_MOTION.
 
-    If the first non-neutral phase is a POSE_HOLD, inserts a brief
-    HAND_MOTION intro (8s) right after the opening neutral. Also clamps
-    the opening neutral to ≤5s so the intro lands before the 10s mark.
+    Rule: after the opening neutral, the very first action must be a
+    HAND_MOTION — never a POSE_HOLD. If Gemini violates this:
+      1. Clamp opening neutral to 3s (matches Rule 1).
+      2. Insert an 8s HAND_MOTION intro before the first POSE_HOLD.
+      3. Cap that first POSE_HOLD to 12s; redistribute excess to the
+         closing neutral so total duration stays intact.
     """
     if not phases_data:
         return phases_data
 
     result = list(phases_data)
 
-    # Clamp opening neutral to 5s
+    # Clamp opening neutral to 3s (Rule 1)
     if _PHASE_TYPE_MAP.get(result[0]["template_id"]) == PhaseType.NEUTRAL:
-        if result[0]["duration_sec"] > 5:
-            result[0] = dict(result[0], duration_sec=5)
+        if result[0]["duration_sec"] > 3:
+            result[0] = dict(result[0], duration_sec=3)
 
     # Find first non-neutral index
     first_content = next(
@@ -298,7 +310,42 @@ def _ensure_early_motion(phases_data: list[dict]) -> list[dict]:
     if _PHASE_TYPE_MAP.get(result[first_content]["template_id"]) == PhaseType.POSE_HOLD:
         intro = {"template_id": "motion_arm_diagonal_up_sweep", "duration_sec": 8}
         result = result[:first_content] + [intro] + result[first_content:]
+        first_content += 1  # pose_hold is now one position further
 
+        # Cap the first POSE_HOLD to 12s; put excess into the closing neutral
+        ph = result[first_content]
+        if ph["duration_sec"] > 12:
+            excess = ph["duration_sec"] - 12
+            result[first_content] = dict(ph, duration_sec=12)
+            last = result[-1]
+            if _PHASE_TYPE_MAP.get(last["template_id"]) == PhaseType.NEUTRAL:
+                result[-1] = dict(last, duration_sec=last["duration_sec"] + excess)
+
+    return result
+
+
+def _fix_consecutive_hand_motion(phases_data: list[dict]) -> list[dict]:
+    """Insert a short POSE_HOLD between any two adjacent HAND_MOTION phases.
+
+    When Gemini places two HAND_MOTION phases back-to-back (violating rule 3),
+    this splits half the duration of the second HM into an 8s POSE_HOLD inserted
+    between them, then reduces the second HM by 8s (min 8s remaining).
+    """
+    result = list(phases_data)
+    i = 1
+    while i < len(result):
+        prev_type = _PHASE_TYPE_MAP.get(result[i - 1]["template_id"])
+        curr_type = _PHASE_TYPE_MAP.get(result[i]["template_id"])
+        if prev_type == PhaseType.HAND_MOTION and curr_type == PhaseType.HAND_MOTION:
+            # Steal 8s from the current HM to create a POSE_HOLD recovery gap
+            hm_dur = result[i]["duration_sec"]
+            donated = min(8, max(0, hm_dur - 8))  # keep at least 8s in HM
+            bridge = {"template_id": "pose_shoulder_drop_neck_lift", "duration_sec": donated or 8}
+            result[i] = dict(result[i], duration_sec=max(8, hm_dur - (donated or 8)))
+            result.insert(i, bridge)
+            i += 2  # skip past the newly inserted PH
+        else:
+            i += 1
     return result
 
 
@@ -345,14 +392,32 @@ def _cap_consecutive_repeat_duration(phases_data: list[dict], max_repeat_sec: in
             excess += result[i]["duration_sec"] - max_repeat_sec
             result[i] = dict(result[i], duration_sec=max_repeat_sec)
 
-    # Add excess to the last non-neutral phase to preserve total duration
+    # Redistribute excess into the closing neutral to preserve total duration.
+    # Dumping it onto the last HAND_MOTION can push it past the 30s limit.
     if excess > 0:
         for i in range(len(result) - 1, -1, -1):
-            if _PHASE_TYPE_MAP.get(result[i]["template_id"]) != PhaseType.NEUTRAL:
+            if _PHASE_TYPE_MAP.get(result[i]["template_id"]) == PhaseType.NEUTRAL:
                 result[i] = dict(result[i], duration_sec=result[i]["duration_sec"] + excess)
                 break
+        else:
+            result[-1] = dict(result[-1], duration_sec=result[-1]["duration_sec"] + excess)
 
     return result
+
+
+def _format_energy_section(energy_timeline: list | None) -> str:
+    """Render the energy timeline block for the Gemini prompt."""
+    if not energy_timeline:
+        return "Energy timeline: not available — use overall energy value uniformly.\n"
+    lines = ["Energy timeline (15-second windows, measured from audio):"]
+    for seg in energy_timeline:
+        s   = seg.start_sec if hasattr(seg, "start_sec") else seg["start_sec"]
+        e   = seg.end_sec   if hasattr(seg, "end_sec")   else seg["end_sec"]
+        en  = seg.energy    if hasattr(seg, "energy")     else seg["energy"]
+        tag = "HIGH" if en >= 0.65 else ("LOW" if en <= 0.40 else "mid")
+        lines.append(f"  {s:3d}–{e}s: {en:.2f} [{tag}]")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def generate_flow_with_gemini(
@@ -360,6 +425,7 @@ def generate_flow_with_gemini(
     bpm: int,
     energy: float,
     song_name: str,
+    energy_timeline: list | None = None,
 ) -> Flow | None:
     """Ask Gemini to orchestrate a flow from real audio features.
 
@@ -376,6 +442,7 @@ def generate_flow_with_gemini(
         duration_sec=duration_sec,
         bpm=bpm,
         energy=energy,
+        energy_section=_format_energy_section(energy_timeline),
     )
 
     try:
@@ -423,6 +490,9 @@ def generate_flow_with_gemini(
     # Cap consecutive repeat duration to 6s
     phases_data = _cap_consecutive_repeat_duration(phases_data, max_repeat_sec=6)
 
+    # Enforce rule 3: no two HAND_MOTION phases back-to-back (split duration between them)
+    phases_data = _fix_consecutive_hand_motion(phases_data)
+
     # Build Flow
     phases: list[Phase] = []
     cursor = 0.0
@@ -458,60 +528,125 @@ def generate_flow_with_gemini(
 
 
 # ── Core generation ──────────────────────────────────────────────
+#
+# Structure mirrors Gemini path (rule 1-4):
+#   NEUTRAL(3s) → HAND_MOTION intro(9s) → [POSE_HOLD(8-12s) → HAND_MOTION(15-30s)] × N → NEUTRAL(3s)
+#
+# Tempo maps to path-1 energy: FAST ≈ high energy (shorter phases), SLOW ≈ low energy (longer phases).
 
-_OPEN_NEUTRAL_BASE = 12.0
-_CLOSE_NEUTRAL_BASE = 10.0
-_PAIR_BUDGET_REF = 49.0  # reference pair duration from 180s flow
-_PH_RATIO = 0.56
-_HM_RATIO = 0.44
-_PH_MIN, _PH_MAX = 20.0, 35.0
-_HM_MIN, _HM_MAX = 15.0, 30.0
-_PAIRS_MIN, _PAIRS_MAX = 1, 12
+_OPEN_NEUTRAL_DUR  = 3
+_CLOSE_NEUTRAL_DUR = 3
+_INTRO_MOTION_DUR  = 9   # exempt from the 15-30s HM rule (shows movement immediately)
+
+_PH_MIN, _PH_MAX = 8, 12    # POSE_HOLD recovery window
+_HM_MIN, _HM_MAX = 15, 30   # HAND_MOTION active window
+
+# Base durations per tempo level (SLOW≈low-energy, FAST≈high-energy)
+_TEMPO_HM: dict[TempoLevel, int] = {
+    TempoLevel.SLOW:   27,
+    TempoLevel.MEDIUM: 22,
+    TempoLevel.FAST:   16,
+}
+_TEMPO_PH: dict[TempoLevel, int] = {
+    TempoLevel.SLOW:   12,
+    TempoLevel.MEDIUM: 10,
+    TempoLevel.FAST:    8,
+}
+
+_FIXED_OVERHEAD = _OPEN_NEUTRAL_DUR + _INTRO_MOTION_DUR + _CLOSE_NEUTRAL_DUR  # 15s
 
 
-def _compute_pair_timing(core_budget: float, num_pairs: int):
-    pair_budget = core_budget / num_pairs
-    ph_dur = max(_PH_MIN, min(_PH_MAX, round(pair_budget * _PH_RATIO)))
-    hm_dur = max(_HM_MIN, min(_HM_MAX, round(pair_budget * _HM_RATIO)))
-    return ph_dur, hm_dur
+def _plan_covering(
+    templates: list[PhaseTemplate],
+    phase_type: PhaseType,
+    tempo: TempoLevel,
+    num_slots: int,
+    rng: random.Random,
+) -> list[PhaseTemplate]:
+    """Return num_slots templates, covering every available template at least once when possible.
+
+    Preferred templates match the given tempo; falls back to MEDIUM then any.
+    When num_slots >= len(preferred), the shuffled base guarantees full coverage.
+    """
+    by_type = [t for t in templates if t.type == phase_type]
+    if not by_type:
+        raise ValueError(f"No templates of type {phase_type}")
+
+    preferred = [t for t in by_type if tempo in t.tempo_profile]
+    if not preferred:
+        preferred = [t for t in by_type if TempoLevel.MEDIUM in t.tempo_profile]
+    if not preferred:
+        preferred = by_type
+
+    base = list(preferred)
+    rng.shuffle(base)  # shuffled base guarantees coverage for the first len(base) slots
+
+    plan: list[PhaseTemplate] = list(base[:num_slots])
+    while len(plan) < num_slots:
+        plan.append(rng.choice(preferred))
+    return plan
 
 
 def generate_flow(duration_sec: int, tempo: TempoLevel, seed: int | None = None) -> Flow:
     rng = random.Random(seed)
     templates = _load_templates()
 
+    hm_base = _TEMPO_HM.get(tempo, _TEMPO_HM[TempoLevel.MEDIUM])
+    ph_base = _TEMPO_PH.get(tempo, _TEMPO_PH[TempoLevel.MEDIUM])
+
     # ── Duration allocation ──
-    core_budget = duration_sec - _OPEN_NEUTRAL_BASE - _CLOSE_NEUTRAL_BASE
-    num_pairs = max(_PAIRS_MIN, min(_PAIRS_MAX, round(core_budget / _PAIR_BUDGET_REF)))
-    ph_dur, hm_dur = _compute_pair_timing(core_budget, num_pairs)
+    core_budget = max(0, duration_sec - _FIXED_OVERHEAD)
+    pair_base = hm_base + ph_base
 
-    # Safety: reduce pairs if clamped durations exceed budget
-    while num_pairs > 1 and num_pairs * (ph_dur + hm_dur) > core_budget:
-        num_pairs -= 1
-        ph_dur, hm_dur = _compute_pair_timing(core_budget, num_pairs)
+    hm_durs: list[int] = []
+    ph_dur = 0
 
-    actual_core = num_pairs * (ph_dur + hm_dur)
+    if core_budget < _PH_MIN + _HM_MIN:
+        # Song too short for any pairs — just neutral + intro motion + neutral
+        num_pairs = 0
+    else:
+        num_pairs = max(1, round(core_budget / pair_base))
 
-    # Absorb remainder into opening neutral
-    open_neutral_dur = round(duration_sec - actual_core - _CLOSE_NEUTRAL_BASE, 1)
-    close_neutral_dur = _CLOSE_NEUTRAL_BASE
+        # Reduce pairs until they fit with clamped durations
+        while True:
+            pair_budget = core_budget / num_pairs
+            ph_dur = int(max(_PH_MIN, min(_PH_MAX, round(pair_budget * ph_base / pair_base))))
+            hm_floor = int(max(_HM_MIN, min(_HM_MAX, int(pair_budget - ph_dur))))
+            if num_pairs == 1 or num_pairs * (ph_dur + hm_floor) <= core_budget:
+                break
+            num_pairs -= 1
+
+        # Distribute leftover seconds evenly across HM phases (front-weighted, capped at HM_MAX).
+        # This prevents any single HM from ballooning when floor-division leaves a large remainder.
+        used = num_pairs * (ph_dur + hm_floor)
+        remainder = core_budget - used
+        hm_durs = [min(_HM_MAX, hm_floor + (1 if i < remainder else 0)) for i in range(num_pairs)]
+
+    # ── Plan template sequences (coverage-first) ──
+    neutral_tmpls = [t for t in templates if t.type == PhaseType.NEUTRAL] or templates
+    open_tmpl = rng.choice(neutral_tmpls)
+
+    motion_plan: list[PhaseTemplate] = []
+    pose_plan:   list[PhaseTemplate] = []
+    if num_pairs > 0:
+        # intro slot + num_pairs core slots for HAND_MOTION
+        motion_plan = _plan_covering(templates, PhaseType.HAND_MOTION, tempo, num_pairs + 1, rng)
+        pose_plan   = _plan_covering(templates, PhaseType.POSE_HOLD,   tempo, num_pairs,     rng)
+    else:
+        motion_plan = _plan_covering(templates, PhaseType.HAND_MOTION, tempo, 1, rng)
 
     # ── Build phases ──
     phases: list[Phase] = []
     cursor = 0.0
     idx = 0
 
-    # Opening neutral — pick randomly from neutral templates
-    neutral_tmpls = [t for t in templates if t.type == PhaseType.NEUTRAL]
-    if not neutral_tmpls:
-        neutral_tmpls = [t for t in templates]
-    open_tmpl = rng.choice(neutral_tmpls)
+    # 1. Opening NEUTRAL (3s)
     phases.append(Phase(
         index=idx,
         name="Calibration",
         phase_type=PhaseType.NEUTRAL,
         start_sec=cursor,
-        end_sec=round(cursor + open_neutral_dur, 1),
+        end_sec=float(_OPEN_NEUTRAL_DUR),
         tracked_points=[
             TrackedPoint.HEAD,
             TrackedPoint.LEFT_SHOULDER,
@@ -521,15 +656,27 @@ def generate_flow(duration_sec: int, tempo: TempoLevel, seed: int | None = None)
         ],
         description=open_tmpl.intent,
     ))
-    cursor = round(cursor + open_neutral_dur, 1)
+    cursor = float(_OPEN_NEUTRAL_DUR)
     idx += 1
 
-    # ── Plan full sequences upfront before assigning any timing ──
-    pose_plan   = _plan_sequence(templates, PhaseType.POSE_HOLD,   tempo, num_pairs, rng)
-    motion_plan = _plan_sequence(templates, PhaseType.HAND_MOTION, tempo, num_pairs, rng)
+    # 2. Intro HAND_MOTION (9s — shows movement immediately, exempt from 15-30s rule)
+    intro_tmpl = motion_plan[0]
+    intro_end = cursor + _INTRO_MOTION_DUR if num_pairs > 0 else float(duration_sec - _CLOSE_NEUTRAL_DUR)
+    phases.append(Phase(
+        index=idx,
+        name=intro_tmpl.id,
+        phase_type=PhaseType.HAND_MOTION,
+        start_sec=cursor,
+        end_sec=round(intro_end, 1),
+        tracked_points=_expand_anchors(intro_tmpl.primary_anchors),
+        description=intro_tmpl.intent,
+    ))
+    cursor = round(intro_end, 1)
+    idx += 1
 
+    # 3. Core pairs: POSE_HOLD(recovery) → HAND_MOTION(active)
     for pair_i in range(num_pairs):
-        # Pose Hold
+        # POSE_HOLD
         ph_tmpl = pose_plan[pair_i]
         ph_end = round(cursor + ph_dur, 1)
         phases.append(Phase(
@@ -544,11 +691,9 @@ def generate_flow(duration_sec: int, tempo: TempoLevel, seed: int | None = None)
         cursor = ph_end
         idx += 1
 
-        # Hand Motion
-        hm_tmpl = motion_plan[pair_i]
-        hm_end = round(cursor + hm_dur, 1)
-        if pair_i == num_pairs - 1:
-            hm_end = round(duration_sec - close_neutral_dur, 1)
+        # HAND_MOTION — duration pre-computed with distributed remainder (no single long tail)
+        hm_tmpl = motion_plan[pair_i + 1]
+        hm_end = round(cursor + hm_durs[pair_i], 1)
         phases.append(Phase(
             index=idx,
             name=hm_tmpl.id,
@@ -561,7 +706,7 @@ def generate_flow(duration_sec: int, tempo: TempoLevel, seed: int | None = None)
         cursor = hm_end
         idx += 1
 
-    # Closing neutral — prefer a different template than the opening one
+    # 4. Closing NEUTRAL (3s)
     close_candidates = [t for t in neutral_tmpls if t.id != open_tmpl.id] or neutral_tmpls
     close_tmpl = rng.choice(close_candidates)
     phases.append(Phase(
@@ -574,10 +719,7 @@ def generate_flow(duration_sec: int, tempo: TempoLevel, seed: int | None = None)
         description=close_tmpl.intent,
     ))
 
-    # ── Flow ID ──
-    hex_suffix = hashlib.md5(
-        f"{duration_sec}-{tempo}-{seed}".encode()
-    ).hexdigest()[:4]
+    hex_suffix = hashlib.md5(f"{duration_sec}-{tempo}-{seed}".encode()).hexdigest()[:4]
     flow_id = f"gen-{duration_sec}s-{tempo.value}-{hex_suffix}"
 
     return Flow(

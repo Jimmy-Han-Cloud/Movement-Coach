@@ -6,6 +6,7 @@ interface CameraLayoutProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   avatarOverlay?: ReactNode;
   topLeft?: ReactNode;
+  topCenter?: ReactNode;
   topRight?: ReactNode;
   bottomOverlay?: ReactNode;
   rightOverlay?: ReactNode;
@@ -31,6 +32,7 @@ export function CameraLayout({
   videoRef,
   avatarOverlay,
   topLeft,
+  topCenter,
   topRight,
   bottomOverlay,
   rightOverlay,
@@ -107,6 +109,11 @@ export function CameraLayout({
 
       <div className="absolute top-0 left-0 right-0 p-[var(--spacing-4)] flex justify-between items-start pointer-events-none z-[var(--z-hud)]">
         <div className="pointer-events-auto">{topLeft}</div>
+        {topCenter && (
+          <div className="pointer-events-auto absolute left-1/2 -translate-x-1/2 top-[var(--spacing-4)]">
+            {topCenter}
+          </div>
+        )}
         <div className="pointer-events-auto">{topRight}</div>
       </div>
 
@@ -117,7 +124,7 @@ export function CameraLayout({
       )}
 
       {rightOverlay && (
-        <div className="absolute right-0 top-0 bottom-0 flex items-center z-[var(--z-floating)]">
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-end z-[var(--z-floating)]">
           {rightOverlay}
         </div>
       )}

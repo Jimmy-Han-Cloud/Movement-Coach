@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.routes.flow import router as flow_router
+from app.routes.music import router as music_router
 from app.routes.session import router as session_router
 from app.routes.user_params import router as user_params_router
 from app.routes.avatar import router as avatar_router
@@ -24,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(flow_router)
+app.include_router(music_router)
 app.include_router(session_router)
 app.include_router(user_params_router)
 app.include_router(avatar_router)

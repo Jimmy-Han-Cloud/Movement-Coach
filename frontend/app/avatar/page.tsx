@@ -6,10 +6,13 @@ import { CameraLayout } from "@/components/layouts";
 import { SongCarousel, type Song } from "@/components/avatar";
 import { GestureButton, GoBubble, CameraError } from "@/components/ui";
 import { RiveCoach } from "@/components/avatar/rive-coach";
+import { CharacterCarousel, type CharacterOption } from "@/components/avatar";
 import { useWebcam } from "@/lib/use-webcam";
 import { usePoseValidation } from "@/modules/pose-validation";
 import { useCheckmarkGesture } from "@/lib/use-checkmark-gesture";
-import { generateFlowForSong, saveActiveFlow, saveActiveAudioUrl, buildFallbackFlow } from "@/lib/api/flows";
+import { generateFlowForSong, saveActiveFlow, saveActiveAudioUrl, saveActiveSong, buildFallbackFlow, saveFlowForSong, loadFlowForSong } from "@/lib/api/flows";
+import { saveCoachRiv } from "@/lib/api/avatar";
+import { triggerBurst, startRain, stopRain } from "@/lib/sakura-burst";
 import { analyzeAudio, type AudioFeatures } from "@/lib/analyze-audio";
 
 /**
@@ -18,7 +21,7 @@ import { analyzeAudio, type AudioFeatures } from "@/lib/analyze-audio";
  *
  * selecting-character:
  *   - Rive coach visible, no card UI
- *   - Draw ✓ in the air to confirm and enter song selection
+ *   - Click avatar or press Enter to confirm and enter song selection
  *
  * selecting-song:
  *   - Song carousel visible (preset songs + "Upload Music" option)
@@ -26,6 +29,23 @@ import { analyzeAudio, type AudioFeatures } from "@/lib/analyze-audio";
  *   - GoBubble (or Enter) to start
  */
 type AvatarState = "selecting-character" | "selecting-song" | "locked";
+
+// ── Character roster ──────────────────────────────────────────────
+
+const CHARACTERS: CharacterOption[] = [
+  { id: "coach-1", name: "Coach 1", description: "Original coach",  available: true, rivSrc: "/animations/coach.riv"   },
+  { id: "coach-2", name: "Coach 2", description: "New coach style", available: true, rivSrc: "/animations/coach_2.riv" },
+  { id: "coach-3", name: "Coach 3", description: "New coach style", available: true, rivSrc: "/animations/coach_3.riv" },
+];
+
+// ── Pose validation params (module-level so reference is stable across renders) ──
+
+const AVATAR_USER_PARAMS = {
+  pose_hold_duration: 2.0,
+  positional_tolerance: 0.5,
+  elbow_participation_threshold: 0.4,
+  hand_motion_tempo: 1.0,
+};
 
 // ── Preset audio paths ────────────────────────────────────────────
 
@@ -46,54 +66,6 @@ const PRESET_SONGS: Song[] = [
   { id: UPLOAD_SONG_ID,  name: "Upload Music",    artist: "Your choice",  durationSec: 0   },
 ];
 
-// ── Sakura rain data ──────────────────────────────────────────────
-
-const SAKURA_COLORS = [
-  "#ffd1dc", "#ffb7c5", "#ff8fab", "#f9c0cb",
-  "#ffe4e8", "#ffc8d8", "#ff85a1", "#ffdde5", "#ffaec0",
-];
-
-const SAKURA_RAIN_PETALS: Array<{
-  left: number; dur: number; delay: number;
-  drift: number; rot: number;
-  w: number; h: number; color: string;
-}> = Array.from({ length: 60 }, (_, i) => ({
-  left:  (i * 37 + 13) % 100,                           // 0–100 vw, spread evenly
-  dur:   2000 + ((i * 53) % 1501),                      // 2000–3500 ms
-  delay: (i * 79) % 2001,                               // 0–2000 ms
-  drift: ((i * 31) % 81) - 40,                          // -40 to +40 px
-  rot:   ((i * 113) % 721) - 360,                       // -360 to +360 deg
-  w:     8 + (i % 3) * 5,                               // 8, 13, or 18 px
-  h:     5 + (i % 3) * 3,                               // 5,  8, or 11 px
-  color: SAKURA_COLORS[i % SAKURA_COLORS.length],
-}));
-
-/** Full-screen cherry blossom rain shown during the "locked" transition. */
-function SakuraRainOverlay() {
-  return (
-    <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden">
-      {SAKURA_RAIN_PETALS.map((p, i) => (
-        <div
-          key={i}
-          className="sakura-fall-petal absolute"
-          style={{
-            left:            `${p.left}vw`,
-            top:             0,
-            width:           `${p.w}px`,
-            height:          `${p.h}px`,
-            borderRadius:    "50%",
-            backgroundColor: p.color,
-            "--fall-drift":  `${p.drift}px`,
-            "--fall-rot":    `${p.rot}deg`,
-            "--fall-dur":    `${p.dur}ms`,
-            animationDelay:  `${p.delay}ms`,
-          } as React.CSSProperties}
-        />
-      ))}
-    </div>
-  );
-}
-
 /** Detect duration of an audio File via a temporary Audio element. */
 function detectAudioDuration(file: File): Promise<number> {
   return new Promise((resolve) => {
@@ -111,7 +83,8 @@ export default function AvatarSetupPage() {
   const router = useRouter();
   const webcam = useWebcam();
 
-  const [avatarState, setAvatarState]   = useState<AvatarState>("selecting-character");
+  const [avatarState, setAvatarState]         = useState<AvatarState>("selecting-character");
+  const [currentCharacterIndex, setCurrentCharacterIndex] = useState(0);
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [checkConfirmed, setCheckConfirmed]     = useState(false);
 
@@ -121,7 +94,8 @@ export default function AvatarSetupPage() {
   const [uploadedDuration, setUploadedDuration] = useState(0);
   const [uploadedFeatures, setUploadedFeatures] = useState<AudioFeatures | null>(null);
   const [analyzingAudio, setAnalyzingAudio]     = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef  = useRef<HTMLInputElement>(null);
+  const goBubbleRef   = useRef<HTMLDivElement>(null);
 
   // Blob URL is revoked in handleFileChange when a new file replaces it.
   // Do NOT revoke on unmount — game page needs the URL to play audio.
@@ -220,32 +194,27 @@ export default function AvatarSetupPage() {
 
   const pose = usePoseValidation({
     videoRef: webcam.videoRef,
-    userParams: {
-      pose_hold_duration: 2.0,
-      positional_tolerance: 0.5,
-      elbow_participation_threshold: 0.4,
-      hand_motion_tempo: 1.0,
-    },
+    userParams: AVATAR_USER_PARAMS,
     currentPhase: null,
     phaseElapsed: 0,
     onValidation: () => {},
   });
 
-  const handPositions = pose.trackedPoints
-    ? (() => {
-        const pts = pose.trackedPoints;
-        const out: { x: number; y: number }[] = [];
-        if (pts.left_hand && pts.left_elbow) {
-          const w = pts.left_hand, e = pts.left_elbow;
-          out.push({ x: w.x + (w.x - e.x) * 0.4, y: w.y + (w.y - e.y) * 0.4 });
-        }
-        if (pts.right_hand && pts.right_elbow) {
-          const w = pts.right_hand, e = pts.right_elbow;
-          out.push({ x: w.x + (w.x - e.x) * 0.4, y: w.y + (w.y - e.y) * 0.4 });
-        }
-        return out;
-      })()
-    : [];
+  const handPositionsRef = useRef<{ x: number; y: number }[]>([]);
+  handPositionsRef.current = (() => {
+    const pts = pose.trackedPointsRef.current;
+    if (!pts) return [];
+    const out: { x: number; y: number }[] = [];
+    if (pts.left_hand && pts.left_elbow) {
+      const w = pts.left_hand, e = pts.left_elbow;
+      out.push({ x: w.x + (w.x - e.x) * 0.4, y: w.y + (w.y - e.y) * 0.4 });
+    }
+    if (pts.right_hand && pts.right_elbow) {
+      const w = pts.right_hand, e = pts.right_elbow;
+      out.push({ x: w.x + (w.x - e.x) * 0.4, y: w.y + (w.y - e.y) * 0.4 });
+    }
+    return out;
+  })();
 
   const headY = pose.trackedPoints?.head?.y;
   const shoulderY =
@@ -270,19 +239,31 @@ export default function AvatarSetupPage() {
 
   // ── Character confirm ────────────────────────────────────────────
 
+  const handlePrevCharacter = useCallback(() => {
+    setCurrentCharacterIndex((i) => (i <= 0 ? CHARACTERS.length - 1 : i - 1));
+  }, []);
+
+  const handleNextCharacter = useCallback(() => {
+    setCurrentCharacterIndex((i) => (i >= CHARACTERS.length - 1 ? 0 : i + 1));
+  }, []);
+
   const handleConfirmCharacter = useCallback(() => {
     if (avatarState !== "selecting-character") return;
+    const selected = CHARACTERS[currentCharacterIndex];
+    saveCoachRiv(selected.rivSrc ?? "/animations/coach.riv");
     setCheckConfirmed(true);
     setTimeout(() => {
       setCheckConfirmed(false);
       setAvatarState("selecting-song");
     }, 600);
-  }, [avatarState]);
+  }, [avatarState, currentCharacterIndex]);
 
+  // Gesture detection disabled — character is now confirmed via Enter key or avatar click.
+  // Keep this hook available for future re-activation.
   useCheckmarkGesture({
-    handPositions,
+    handPositions: [],
     onDetected: handleConfirmCharacter,
-    enabled: avatarState === "selecting-character",
+    enabled: false,
   });
 
   // ── Song navigation ─────────────────────────────────────────────
@@ -312,6 +293,13 @@ export default function AvatarSetupPage() {
 
     setAvatarState("locked");
 
+    // Burst from Go bubble position, then start rain after 3s
+    const rect = goBubbleRef.current?.getBoundingClientRect();
+    const burstX = rect ? rect.left + rect.width  / 2 : window.innerWidth  * 0.9;
+    const burstY = rect ? rect.top  + rect.height / 2 : window.innerHeight * 0.5;
+    triggerBurst(burstX, burstY);
+    const rainTimeout = setTimeout(startRain, 3000);
+
     // Stop any playing preview
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
@@ -329,8 +317,9 @@ export default function AvatarSetupPage() {
     const durationSec =
       selectedSong.id === UPLOAD_SONG_ID ? uploadedDuration : selectedSong.durationSec;
 
-    // Save audio URL for game page
+    // Save audio URL and song metadata for game page
     if (audioUrl) saveActiveAudioUrl(audioUrl);
+    saveActiveSong({ name: selectedSong.name, artist: selectedSong.artist, durationSec });
 
     const isUpload = selectedSong.id === UPLOAD_SONG_ID;
 
@@ -339,24 +328,34 @@ export default function AvatarSetupPage() {
     const audioFeatures = isUpload ? (uploadedFeatures ?? undefined) : undefined;
     const songId = isUpload ? undefined : selectedSong.id;
 
-    // Generate flow from backend; use built-in fallback if backend unreachable
-    try {
-      const flow = await generateFlowForSong(
-        selectedSong.name,
-        selectedSong.artist,
-        durationSec,
-        audioFeatures,
-        songId,
-      );
-      saveActiveFlow(flow);
-    } catch (err) {
-      console.warn("Backend unavailable, using built-in flow:", err);
-      saveActiveFlow(buildFallbackFlow(selectedSong.name, durationSec || 180));
-    }
+    // Preset songs: check sessionStorage before hitting the network.
+    const cachedFlow = songId ? loadFlowForSong(songId) : null;
 
-    // Give the user 2 seconds to enjoy the sakura rain before navigating
-    await new Promise<void>((r) => setTimeout(r, 2000));
+    const flowPromise = cachedFlow
+      ? Promise.resolve(cachedFlow)
+      : generateFlowForSong(
+          selectedSong.name,
+          selectedSong.artist,
+          durationSec,
+          audioFeatures,
+          songId,
+        ).then((flow) => {
+          if (songId) saveFlowForSong(songId, flow);
+          return flow;
+        }).catch((err) => {
+          console.warn("Backend unavailable, using built-in flow:", err);
+          return buildFallbackFlow(selectedSong.name, durationSec || 180);
+        });
 
+    const [flow] = await Promise.all([
+      flowPromise,
+      new Promise<void>((r) => setTimeout(r, 2000)),
+    ]);
+
+    console.log("🎵 Generated flow:", JSON.stringify(flow, null, 2));
+    saveActiveFlow(flow);
+    clearTimeout(rainTimeout);
+    stopRain();
     router.push(`/game?songId=${selectedSong.id}`);
   }, [avatarState, currentSongIndex, uploadedFile, uploadedBlobUrl, uploadedDuration, uploadedFeatures, router]);
 
@@ -365,7 +364,7 @@ export default function AvatarSetupPage() {
   const getLeftButton = () => {
     switch (avatarState) {
       case "selecting-character":
-        return { label: "◀", onTrigger: () => {}, disabled: false };
+        return { label: "◀", onTrigger: handlePrevCharacter, disabled: CHARACTERS.length <= 1 };
       case "selecting-song":
         return { label: "◀", onTrigger: handlePrevSong, disabled: false };
       case "locked":
@@ -376,7 +375,7 @@ export default function AvatarSetupPage() {
   const getRightButton = () => {
     switch (avatarState) {
       case "selecting-character":
-        return { label: "▶", onTrigger: () => {}, disabled: false };
+        return { label: "▶", onTrigger: handleNextCharacter, disabled: CHARACTERS.length <= 1 };
       case "selecting-song":
         return { label: "▶", onTrigger: handleNextSong, disabled: false };
       case "locked":
@@ -400,7 +399,9 @@ export default function AvatarSetupPage() {
     const onKey = (e: KeyboardEvent) => {
       switch (avatarState) {
         case "selecting-character":
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleConfirmCharacter(); }
+          if (e.key === "ArrowLeft")               { e.preventDefault(); handlePrevCharacter(); }
+          else if (e.key === "ArrowRight")          { e.preventDefault(); handleNextCharacter(); }
+          else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleConfirmCharacter(); }
           break;
         case "selecting-song":
           if (e.key === "ArrowLeft")                    { e.preventDefault(); handlePrevSong(); }
@@ -413,7 +414,7 @@ export default function AvatarSetupPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [avatarState, handleConfirmCharacter, handlePrevSong, handleNextSong, handleLockAndStart]);
+  }, [avatarState, handlePrevCharacter, handleNextCharacter, handleConfirmCharacter, handlePrevSong, handleNextSong, handleLockAndStart]);
 
   // ── Render ──────────────────────────────────────────────────────
 
@@ -434,16 +435,32 @@ export default function AvatarSetupPage() {
         headY={headY}
         shoulderY={shoulderY}
         avatarOverlay={
-          <RiveCoach
-            animationName="idle"
-            shoulderWidthPx={shoulderWidthPx}
-            shoulderY={shoulderY}
-          />
+          avatarState === "selecting-character" ? (
+            <div
+              className="pointer-events-auto cursor-pointer w-full h-full flex items-center justify-center"
+              onClick={handleConfirmCharacter}
+            >
+              <RiveCoach
+                key={CHARACTERS[currentCharacterIndex].id}
+                animationName="idle"
+                rivSrc={CHARACTERS[currentCharacterIndex].rivSrc}
+                shoulderWidthPx={shoulderWidthPx}
+                shoulderY={shoulderY}
+              />
+            </div>
+          ) : (
+            <RiveCoach
+              animationName="idle"
+              rivSrc={CHARACTERS[currentCharacterIndex].rivSrc}
+              shoulderWidthPx={shoulderWidthPx}
+              shoulderY={shoulderY}
+            />
+          )
         }
         topRight={
           avatarState === "selecting-character" && (
             <div className="text-white/60 text-sm bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full">
-              {checkConfirmed ? "✓ Confirmed!" : "Draw ✓ to confirm"}
+              {checkConfirmed ? "✓ Confirmed!" : "Click avatar or press Enter"}
             </div>
           )
         }
@@ -454,7 +471,6 @@ export default function AvatarSetupPage() {
               disabled={leftBtn.disabled}
               variant="secondary"
               position="left"
-              handPositions={handPositions}
             >
               {leftBtn.label}
             </GestureButton>
@@ -464,20 +480,10 @@ export default function AvatarSetupPage() {
               disabled={rightBtn.disabled}
               variant="primary"
               position="right"
-              handPositions={handPositions}
             >
               {rightBtn.label}
             </GestureButton>
           </div>
-        }
-        rightOverlay={
-          (avatarState === "selecting-song" || avatarState === "locked") && (
-            <GoBubble
-              onTrigger={handleLockAndStart}
-              handPositions={handPositions}
-              disabled={goBubbleDisabled}
-            />
-          )
         }
         centerOverlay={
           avatarState === "locked" ? (
@@ -488,6 +494,29 @@ export default function AvatarSetupPage() {
           ) : undefined
         }
       >
+        {/* Character carousel — shown during character selection */}
+        <CharacterCarousel
+          characters={CHARACTERS}
+          currentIndex={currentCharacterIndex}
+          visible={avatarState === "selecting-character"}
+        />
+
+        {/* GoBubble — absolutely positioned: diagonally above the right nav button */}
+        {avatarState === "selecting-song" && (
+          <div
+            ref={goBubbleRef}
+            className="absolute z-[var(--z-floating)] pointer-events-auto"
+            style={{ right: "21%", top: "33%" }}
+          >
+            <GoBubble
+              onTrigger={handleLockAndStart}
+              handPositionsRef={handPositionsRef}
+              disabled={goBubbleDisabled}
+              className="!mr-0"
+            />
+          </div>
+        )}
+
         {/* Song carousel */}
         <SongCarousel
           songs={PRESET_SONGS}
@@ -536,9 +565,6 @@ export default function AvatarSetupPage() {
       {webcam.error && (
         <CameraError error={webcam.error} onRetry={webcam.retry} />
       )}
-
-      {/* Full-screen sakura rain during locked/transition state */}
-      {avatarState === "locked" && <SakuraRainOverlay />}
     </>
   );
 }

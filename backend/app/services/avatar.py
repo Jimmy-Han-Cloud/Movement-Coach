@@ -48,7 +48,7 @@ def generate_avatar(photo_bytes: bytes, content_type: str) -> tuple[str, str]:
         raise RuntimeError("Gemini API key not configured")
 
     response = _client.models.generate_content(
-        model="gemini-2.0-flash-exp",
+        model="gemini-2.5-flash",
         contents=[
             types.Part.from_bytes(data=photo_bytes, mime_type=content_type),
             AVATAR_PROMPT,

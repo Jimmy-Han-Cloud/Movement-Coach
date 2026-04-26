@@ -1,7 +1,5 @@
 "use client";
 
-import { ProgressBar } from "../ui";
-
 interface Song {
   id: string;
   name: string;
@@ -11,7 +9,7 @@ interface Song {
 
 interface SongDisplayProps {
   song: Song;
-  progress: number; // 0-100
+  progress?: number; // unused — kept for API compat
 }
 
 /**
@@ -22,9 +20,9 @@ interface SongDisplayProps {
  * - No dropdown, no gesture interaction
  * - Progress bar shows flow completion
  */
-export function SongDisplay({ song, progress }: SongDisplayProps) {
+export function SongDisplay({ song }: SongDisplayProps) {
   return (
-    <div className="space-y-3">
+    <div>
       {/* Song Info - Display Only */}
       <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm border border-white/20 rounded-[var(--radius-lg)]">
         {/* Music Icon */}
@@ -66,18 +64,6 @@ export function SongDisplay({ song, progress }: SongDisplayProps) {
             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
           />
         </svg>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="w-48">
-        <ProgressBar
-          value={progress}
-          size="sm"
-          variant={progress >= 90 ? "success" : "default"}
-        />
-        <div className="mt-1 text-xs text-white/50">
-          Flow Progress
-        </div>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from app.models.avatar import AvatarResponse
 from app.services.auth import get_current_user
 from app.services.avatar import generate_avatar, is_available, validate_upload
+from app.services.rate_limit import check_rate_limit
 
 router = APIRouter(prefix="/api/avatar", tags=["avatar"])
 
@@ -12,6 +13,8 @@ async def create_avatar(
     file: UploadFile,
     user_id: str = Depends(get_current_user),
 ):
+    check_rate_limit(f"avatar:{user_id}", max_calls=5, window_sec=86400)
+
     if not is_available():
         raise HTTPException(status_code=503, detail="Avatar service unavailable")
 

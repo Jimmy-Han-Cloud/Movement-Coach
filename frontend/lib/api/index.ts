@@ -1,4 +1,5 @@
 export { setAuthToken, setDebugUserId } from "./client";
+export { generateAvatar, saveAvatarUrl, loadAvatarUrl } from "./avatar";
 export { fetchFlow, fetchFlowList } from "./flows";
 export {
   createSession,

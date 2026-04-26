@@ -13,6 +13,8 @@ export interface PoseValidationState {
   ready: boolean;
   /** Current smoothed tracked points (null if no detection) */
   trackedPoints: TrackedPoints | null;
+  /** Always-current ref updated every frame — read in RAF loops to bypass React renders */
+  trackedPointsRef: { current: TrackedPoints | null };
   /** Calibration baseline captured during neutral phase */
   baseline: CalibrationBaseline | null;
   /** Whether current frame shows the user in target */
@@ -55,6 +57,11 @@ export function usePoseValidation({
   const rafRef = useRef<number | null>(null);
   const onValidationRef = useRef(onValidation);
   onValidationRef.current = onValidation;
+  // Refs for values that change frequently — keeps `detect` stable
+  const currentPhaseRef = useRef(currentPhase);
+  currentPhaseRef.current = currentPhase;
+  const phaseElapsedRef = useRef(phaseElapsed);
+  phaseElapsedRef.current = phaseElapsed;
 
   const [inTarget, setInTarget] = useState(false);
   const [holdAchieved, setHoldAchieved] = useState(false);
@@ -83,12 +90,13 @@ export function usePoseValidation({
     setHoldAchieved(false);
     setElbowParticipating(false);
     setParticipating(false);
-  }, [currentPhase, userParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPhase?.index, userParams]);
 
-  // Detection + validation loop
+  // Detection + validation loop — stable reference (reads changing values via refs)
   const detect = useCallback(() => {
     const video = videoRef.current;
-    if (!video || !ready || video.readyState < 2) {
+    if (!video || video.readyState < 2) {
       rafRef.current = requestAnimationFrame(detect);
       return;
     }
@@ -101,7 +109,19 @@ export function usePoseValidation({
 
     const smoothed = smoothPoints(prevPointsRef.current, raw);
     prevPointsRef.current = smoothed;
-    setTrackedPoints(smoothed);
+    setTrackedPoints(prev => {
+      if (!prev) return smoothed;
+      const THRESHOLD = 0.003;
+      const keys: (keyof TrackedPoints)[] = ["head","left_shoulder","right_shoulder","left_elbow","right_elbow","left_hand","right_hand"];
+      const moved = keys.some(k =>
+        Math.abs(smoothed[k].x - prev[k].x) > THRESHOLD ||
+        Math.abs(smoothed[k].y - prev[k].y) > THRESHOLD
+      );
+      return moved ? smoothed : prev;
+    });
+
+    const currentPhase = currentPhaseRef.current;
+    const phaseElapsed = phaseElapsedRef.current;
 
     // During calibration (neutral phase at index 0), capture baseline
     if (currentPhase?.phase_type === "neutral" && currentPhase.index === 0) {
@@ -113,11 +133,10 @@ export function usePoseValidation({
       const phaseType: PhaseType = currentPhase.phase_type;
 
       if (phaseType === "pose_hold" && poseValidatorRef.current) {
-        // Use head as default primary point for pose hold
         const result = poseValidatorRef.current.validate(
           smoothed,
           "head",
-          { x: 0, y: 0 }, // target offset — will be phase-specific in future
+          { x: 0, y: 0 },
           phaseElapsed,
         );
         setInTarget(result.inTarget);
@@ -141,7 +160,7 @@ export function usePoseValidation({
         const result = motionValidatorRef.current.validate(smoothed, {
           x: 0,
           y: -1,
-        }); // default upward direction
+        });
         setInTarget(result.directionCorrect);
         setHoldAchieved(false);
         setElbowParticipating(result.elbowParticipating);
@@ -163,7 +182,8 @@ export function usePoseValidation({
     }
 
     rafRef.current = requestAnimationFrame(detect);
-  }, [ready, currentPhase, phaseElapsed, videoRef]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (ready) {
@@ -177,6 +197,7 @@ export function usePoseValidation({
   return {
     ready,
     trackedPoints,
+    trackedPointsRef: prevPointsRef,
     baseline: baselineRef.current,
     inTarget,
     holdAchieved,

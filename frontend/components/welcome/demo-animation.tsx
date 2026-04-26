@@ -40,12 +40,6 @@ export function DemoAnimation() {
           </div>
         </div>
 
-        {/* Label */}
-        <div className="absolute bottom-4 text-xs text-white/30 text-center">
-          Demo character
-          <br />
-          <span className="text-[10px]">(Rive animation coming)</span>
-        </div>
       </div>
     </div>
   );

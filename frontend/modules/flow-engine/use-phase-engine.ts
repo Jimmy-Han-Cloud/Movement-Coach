@@ -71,9 +71,9 @@ export function usePhaseEngine({
       onTick: (state) => {
         setStatus(state.status);
         setElapsedTotal(state.elapsedTotal);
-        setCurrentPhaseState(
-          state.phaseStates[state.currentPhaseIndex] ?? null,
-        );
+        // Shallow-copy so React detects the change (PhaseState is mutated in place).
+        const ps = state.phaseStates[state.currentPhaseIndex];
+        setCurrentPhaseState(ps ? { ...ps } : null);
       },
     });
     engineRef.current = engine;

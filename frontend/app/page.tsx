@@ -13,7 +13,7 @@ import { Button } from "@/components/ui";
  * Layout: Left–Center–Right
  * - Left: Product Info, Key benefits, Trust framing
  * - Center: Cartoon Animation (demo), START button
- * - Right: QR Code, Remote Status, Legal (collapsed)
+ * - Right: Donation QR, Legal (collapsed)
  */
 export default function WelcomePage() {
   const router = useRouter();

@@ -11,6 +11,11 @@ logger = logging.getLogger(__name__)
 # ── Fallback table for common preset songs ────────────────────────
 # Ensures consistent results without API calls for known songs.
 _PRESET_MAP: dict[str, tuple[TempoLevel, int, float]] = {
+    # Actual preset songs shipped with the app
+    "mozart minuet":   (TempoLevel.MEDIUM,  96,  0.48),
+    "turkish march":   (TempoLevel.FAST,   132,  0.80),
+    "vivaldi spring":  (TempoLevel.FAST,   120,  0.72),
+    # Legacy / dev entries
     "morning flow":    (TempoLevel.SLOW,   72,  0.35),
     "energy boost":    (TempoLevel.FAST,  128,  0.85),
     "desk break":      (TempoLevel.MEDIUM,  96,  0.55),

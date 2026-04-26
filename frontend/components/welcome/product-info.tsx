@@ -17,7 +17,7 @@ export function ProductInfo() {
 
       {/* Tagline */}
       <p className="text-lg text-white/80">
-        A guided movement experience for desk-bound bodies.
+        A guided movement experience for<br />desk-bound bodies.
       </p>
 
       {/* Key Benefits */}

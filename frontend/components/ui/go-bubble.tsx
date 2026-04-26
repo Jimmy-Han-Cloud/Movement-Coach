@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 interface GoBubbleProps {
   onTrigger: () => void;
   disabled?: boolean;
-  handPositions?: Array<{ x: number; y: number }>;
+  handPositionsRef?: { current: Array<{ x: number; y: number }> };
   dwellTime?: number;
   stickyTime?: number;
   className?: string;
@@ -77,7 +77,7 @@ const SAKURA_PETALS: Array<{
 export function GoBubble({
   onTrigger,
   disabled = false,
-  handPositions = [],
+  handPositionsRef,
   dwellTime = 200,
   stickyTime = 200,
   className = "",
@@ -88,80 +88,91 @@ export function GoBubble({
   const [isHovering, setIsHovering] = useState(false);
   const [isBursting, setIsBursting] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+
+  const isHoveringRef = useRef(false);
+  const isHiddenRef   = useRef(false);
+  const onTriggerRef  = useRef(onTrigger);
+  onTriggerRef.current = onTrigger;
   const dwellTimerRef = useRef<NodeJS.Timeout | null>(null);
   const leaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const rafRef        = useRef<number | null>(null);
 
+  // RAF-based gesture loop — reads handPositionsRef each frame so React state
+  // updates in the pose hook never trigger this effect or cause render cascades.
   useEffect(() => {
-    if (disabled || isHidden || !bubbleRef.current || handPositions.length === 0) {
-      if (dwellTimerRef.current) {
-        clearTimeout(dwellTimerRef.current);
-        dwellTimerRef.current = null;
-      }
-      if (!isHovering) return;
-      if (!leaveTimerRef.current) {
-        leaveTimerRef.current = setTimeout(() => {
-          setIsHovering(false);
-          leaveTimerRef.current = null;
-        }, stickyTime);
-      }
+    if (disabled) {
+      if (isHoveringRef.current) { isHoveringRef.current = false; setIsHovering(false); }
       return;
     }
 
-    const rect = bubbleRef.current.getBoundingClientRect();
-    const windowWidth  = window.innerWidth;
-    const windowHeight = window.innerHeight;
+    function tick() {
+      if (isHiddenRef.current) { rafRef.current = requestAnimationFrame(tick); return; }
 
-    const bubbleBounds = {
-      left:   rect.left   / windowWidth,
-      right:  rect.right  / windowWidth,
-      top:    rect.top    / windowHeight,
-      bottom: rect.bottom / windowHeight,
-    };
-
-    const padding = 0.15;
-    const isOverBubble = handPositions.some(
-      (hand) =>
-        1 - hand.x >= bubbleBounds.left   - padding &&
-        1 - hand.x <= bubbleBounds.right  + padding &&
-        hand.y     >= bubbleBounds.top    - padding &&
-        hand.y     <= bubbleBounds.bottom + padding,
-    );
-
-    if (isOverBubble) {
-      if (leaveTimerRef.current) {
-        clearTimeout(leaveTimerRef.current);
-        leaveTimerRef.current = null;
+      const hands = handPositionsRef?.current;
+      if (!bubbleRef.current || !hands?.length) {
+        if (dwellTimerRef.current) { clearTimeout(dwellTimerRef.current); dwellTimerRef.current = null; }
+        if (isHoveringRef.current && !leaveTimerRef.current) {
+          leaveTimerRef.current = setTimeout(() => {
+            isHoveringRef.current = false;
+            setIsHovering(false);
+            leaveTimerRef.current = null;
+          }, stickyTime);
+        }
+        rafRef.current = requestAnimationFrame(tick);
+        return;
       }
-      if (!isHovering) {
-        setIsHovering(true);
-        dwellTimerRef.current = setTimeout(() => {
-          if (!disabled && !isHidden) {
+
+      const rect = bubbleRef.current.getBoundingClientRect();
+      const ww   = window.innerWidth;
+      const wh   = window.innerHeight;
+      const bounds = {
+        left:   rect.left   / ww,
+        right:  rect.right  / ww,
+        top:    rect.top    / wh,
+        bottom: rect.bottom / wh,
+      };
+
+      const padding = 0.15;
+      const isOver = hands.some(
+        (h) =>
+          1 - h.x >= bounds.left   - padding &&
+          1 - h.x <= bounds.right  + padding &&
+          h.y     >= bounds.top    - padding &&
+          h.y     <= bounds.bottom + padding,
+      );
+
+      if (isOver) {
+        if (leaveTimerRef.current) { clearTimeout(leaveTimerRef.current); leaveTimerRef.current = null; }
+        if (!isHoveringRef.current) {
+          isHoveringRef.current = true;
+          setIsHovering(true);
+          dwellTimerRef.current = setTimeout(() => {
+            if (isHiddenRef.current) return;
+            isHiddenRef.current = true;
             setIsBursting(true);
-            onTrigger();
+            onTriggerRef.current();
             setTimeout(() => setIsHidden(true), 1400);
-          }
-        }, dwellTime);
-      }
-    } else if (isHovering) {
-      if (!leaveTimerRef.current) {
+          }, dwellTime);
+        }
+      } else if (isHoveringRef.current && !leaveTimerRef.current) {
         leaveTimerRef.current = setTimeout(() => {
+          isHoveringRef.current = false;
           setIsHovering(false);
-          if (dwellTimerRef.current) {
-            clearTimeout(dwellTimerRef.current);
-            dwellTimerRef.current = null;
-          }
+          if (dwellTimerRef.current) { clearTimeout(dwellTimerRef.current); dwellTimerRef.current = null; }
           leaveTimerRef.current = null;
         }, stickyTime);
       }
-    }
-  }, [handPositions, disabled, isHidden, isHovering, dwellTime, stickyTime, onTrigger]);
 
-  useEffect(() => {
+      rafRef.current = requestAnimationFrame(tick);
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
     return () => {
+      if (rafRef.current)     cancelAnimationFrame(rafRef.current);
       if (dwellTimerRef.current) clearTimeout(dwellTimerRef.current);
       if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
     };
-  }, []);
+  }, [disabled, dwellTime, stickyTime, handPositionsRef]);
 
   if (isHidden) return null;
 
@@ -171,7 +182,7 @@ export function GoBubble({
     // bubble's scale(0) burst animation.
     <div
       ref={bubbleRef}
-      className={`relative mr-[25%] w-[150px] h-[150px] pointer-events-auto flex-shrink-0 ${className}`}
+      className={`relative mr-[27%] w-[150px] h-[150px] pointer-events-auto flex-shrink-0 ${!isBursting ? "bubble-float" : ""} ${className}`}
     >
       {/* ── Sakura bubble ────────────────────────────────────────── */}
       <div
@@ -186,19 +197,22 @@ export function GoBubble({
           "w-full h-full rounded-full cursor-pointer no-select",
           "flex items-center justify-center",
           "transition-transform duration-[var(--duration-normal)]",
-          isBursting  ? "bubble-burst"          : "",
-          disabled    ? "opacity-30 cursor-not-allowed" : "",
+          isBursting ? "bubble-burst" : "",
+          disabled   ? "opacity-30 cursor-not-allowed" : "",
         ].filter(Boolean).join(" ")}
         style={{
-          background:  "linear-gradient(135deg, #ffd6e0 0%, #ffb7c5 45%, #ff8fab 100%)",
-          boxShadow:   isHovering
-            ? "0 0 55px rgba(255,143,171,0.85), 0 0 22px rgba(255,183,197,0.6)"
-            : "0 0 22px rgba(255,183,197,0.55)",
-          transform:   !isBursting && isHovering ? "scale(1.25)" : undefined,
+          background: isHovering
+            ? "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.85) 0%, rgba(255,150,180,0.65) 45%, rgba(255,100,150,0.55) 100%)"
+            : "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.75) 0%, rgba(255,160,190,0.55) 45%, rgba(255,110,155,0.45) 100%)",
+          boxShadow: isHovering
+            ? "inset 0 0 24px rgba(255,255,255,0.4), 0 0 55px rgba(255,100,150,0.7), 0 8px 32px rgba(255,150,180,0.5)"
+            : "inset 0 0 18px rgba(255,255,255,0.3), 0 0 28px rgba(255,130,170,0.45), 0 4px 16px rgba(0,0,0,0.12)",
+          backdropFilter: "blur(6px)",
+          transform: !isBursting && isHovering ? "scale(1.18)" : undefined,
         }}
       >
         <span
-          className={`text-3xl font-bold text-white/90 transition-transform duration-[var(--duration-fast)] ${isHovering ? "scale-110" : ""}`}
+          className={`text-3xl font-bold text-white drop-shadow-md transition-transform duration-[var(--duration-fast)] ${isHovering ? "scale-110" : ""}`}
         >
           Go
         </span>
