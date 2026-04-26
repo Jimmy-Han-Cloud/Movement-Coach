@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 from typing import Any
 
 import firebase_admin
@@ -20,13 +22,17 @@ def _init() -> None:
         _db = firestore.client()
         return
 
-    path = settings.firebase_service_account_path
-    if not path:
-        logger.warning("FIREBASE_SERVICE_ACCOUNT_PATH not set — using in-memory fallback")
+    # Support JSON content via env var (for Railway / Cloud Run)
+    json_content = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+    if json_content:
+        cred = credentials.Certificate(json.loads(json_content))
+    elif settings.firebase_service_account_path:
+        cred = credentials.Certificate(settings.firebase_service_account_path)
+    else:
+        logger.warning("No Firebase credentials — using in-memory fallback")
         _use_fallback = True
         return
 
-    cred = credentials.Certificate(path)
     firebase_admin.initialize_app(cred, {
         "projectId": settings.google_cloud_project or None,
     })
