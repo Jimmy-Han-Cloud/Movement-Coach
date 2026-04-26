@@ -16,6 +16,7 @@ import { triggerBurst, startRain, stopRain } from "@/lib/sakura-burst";
 import { triggerDandelionBurst, startDandelionFloat, stopDandelionFloat } from "@/lib/dandelion-float";
 import { triggerBubbleBurst, startFishOcean, stopFishOcean } from "@/lib/fish-ocean";
 import { analyzeAudio, type AudioFeatures } from "@/lib/analyze-audio";
+import posthog from "posthog-js";
 
 /**
  * Page 2 State Machine:
@@ -255,6 +256,7 @@ export default function AvatarSetupPage() {
     if (avatarState !== "selecting-character") return;
     const selected = CHARACTERS[currentCharacterIndex];
     saveCoachRiv(selected.rivSrc ?? "/animations/coach.riv");
+    posthog.capture("coach_selected", { coach_id: selected.id, coach_name: selected.name });
     setCheckConfirmed(true);
     setTimeout(() => {
       setCheckConfirmed(false);
@@ -374,6 +376,13 @@ export default function AvatarSetupPage() {
     ]);
 
     saveActiveFlow(flow);
+    posthog.capture("session_started", {
+      coach_id: CHARACTERS[currentCharacterIndex].id,
+      song_id: selectedSong.id,
+      song_name: selectedSong.name,
+      is_upload: isUpload,
+      duration_sec: durationSec,
+    });
     clearTimeout(bgTimeout);
     bgStop();
     router.push(`/game?songId=${selectedSong.id}`);

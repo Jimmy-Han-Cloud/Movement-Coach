@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { usePostHog } from "posthog-js/react";
 import { CameraLayout, ResultModal } from "@/components/layouts";
 import { RiveCoach } from "@/components/avatar/rive-coach";
 import { SongDisplay, SwitchingOverlay, PauseOverlay, GameHud, FlowTimeline, type Song } from "@/components/game";
@@ -95,6 +96,7 @@ function GameFlowLoader() {
 function GameContent({ flow }: { flow: Flow }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const posthog = usePostHog();
   const webcam = useWebcam();
 
   const songIdFromUrl = searchParams.get("songId") || PRESET_SONGS[0].id;
@@ -123,15 +125,27 @@ function GameContent({ flow }: { flow: Flow }) {
     return PRESET_SONGS[0];
   })();
 
+  const isNaturalEndRef = useRef(false);
+  // Refs so handleGameEnd doesn't recreate on every tick
+  const phaseIndexForEventRef = useRef(0);
+  const elapsedForEventRef = useRef(0);
+
   const engine = usePhaseEngine({
     flow,
     userParams: DEFAULT_USER_PARAMS,
-    onComplete: () => handleGameEnd(),
+    onComplete: () => {
+      isNaturalEndRef.current = true;
+      handleGameEnd();
+    },
   });
 
   const currentAnimation  = phaseToAnimation(engine.currentPhase?.name);
   const timelineActiveIndex = engine.currentPhaseIndex;
   const completionPercent = Math.min((engine.elapsedTotal / flow.duration_sec) * 100, 100);
+
+  // Keep refs in sync for use inside callbacks without dep-array churn
+  phaseIndexForEventRef.current = engine.currentPhaseIndex;
+  elapsedForEventRef.current = engine.elapsedTotal;
 
   // Performance score: average quality of non-neutral phases (ok=1, partial=0.5, missed=0)
   const performanceScore = (() => {
@@ -227,10 +241,28 @@ function GameContent({ flow }: { flow: Flow }) {
   }, [gameState, engine.pause, engine.resume]);
 
   const handleGameEnd = useCallback(() => {
+    const wasNatural = isNaturalEndRef.current;
+    isNaturalEndRef.current = false;
     engine.stop();
     setGameState("finished");
     setShowResult(true);
-  }, [engine.stop]);
+    if (wasNatural) {
+      posthog?.capture("session_completed", {
+        song_id: currentSongId,
+        song_name: currentSong.name,
+        score: performanceScore,
+        duration_sec: flow.duration_sec,
+      });
+    } else {
+      posthog?.capture("session_abandoned", {
+        song_id: currentSongId,
+        song_name: currentSong.name,
+        phase_index: phaseIndexForEventRef.current,
+        elapsed_sec: Math.round(elapsedForEventRef.current),
+        reason: "end_session",
+      });
+    }
+  }, [engine.stop, posthog, currentSongId, currentSong.name, performanceScore, flow.duration_sec]);
 
   const handleRemoteSongChange = useCallback(() => {
     if (gameState === "playing" || gameState === "paused") {
@@ -265,12 +297,21 @@ function GameContent({ flow }: { flow: Flow }) {
 
   const handleDialogConfirm = useCallback(() => {
     switch (activeDialog) {
-      case "return-to-avatar": router.push("/avatar"); break;
+      case "return-to-avatar":
+        posthog?.capture("session_abandoned", {
+          song_id: currentSongId,
+          song_name: currentSong.name,
+          phase_index: phaseIndexForEventRef.current,
+          elapsed_sec: Math.round(elapsedForEventRef.current),
+          reason: "return_to_avatar",
+        });
+        router.push("/avatar");
+        break;
       case "end-session":      handleGameEnd();        break;
       case "change-song":      confirmSongChange();    break;
     }
     setActiveDialog(null);
-  }, [activeDialog, router, handleGameEnd, confirmSongChange]);
+  }, [activeDialog, router, handleGameEnd, confirmSongChange, posthog, currentSongId, currentSong.name]);
 
   const handleRepeat = useCallback(() => {
     setShowResult(false);
