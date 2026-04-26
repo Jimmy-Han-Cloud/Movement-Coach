@@ -5,6 +5,10 @@
 
 let _petalId = 0;
 let _rainTimer: ReturnType<typeof setInterval> | null = null;
+let _windTimer: ReturnType<typeof setInterval> | null = null;
+
+// Global wind strength: -1 (left) to +1 (right), drifts slowly over time
+let _wind = (Math.random() - 0.5) * 1.2;
 
 const PALETTES = [
   ["#FFE4EC", "#FFB6CD"],
@@ -26,6 +30,8 @@ function makeSVG(): SVGSVGElement {
   svg.setAttribute("viewBox", "0 0 22 24");
   svg.setAttribute("width", "22");
   svg.setAttribute("height", "24");
+  svg.style.width = "100%";
+  svg.style.height = "100%";
 
   const defs = document.createElementNS(ns, "defs");
   const grad = document.createElementNS(ns, "linearGradient");
@@ -59,17 +65,19 @@ function makeSVG(): SVGSVGElement {
   return svg;
 }
 
-function spawnDiv(x: number, y: number, tag: string): HTMLDivElement {
+function spawnDiv(x: number, y: number, tag: string, scale = 1): HTMLDivElement {
+  const w = Math.round(22 * scale);
+  const h = Math.round(24 * scale);
   const div = document.createElement("div");
   div.style.cssText = [
     "position:fixed",
     `left:${x}px`,
     `top:${y}px`,
-    "width:22px",
-    "height:24px",
+    `width:${w}px`,
+    `height:${h}px`,
     "pointer-events:none",
     "will-change:transform,opacity",
-    "z-index:9999",
+    "z-index:2",
   ].join(";");
   div.dataset.sakura = tag;
   div.append(makeSVG());
@@ -86,6 +94,7 @@ function launchPetal(
   distMult: number,
   maxReach: number,
 ) {
+  const scale = 0.5 + Math.random() * 0.9;
   const dist  = maxReach * distMult;
   const dx    = Math.cos(angle) * dist;
   const dy    = Math.sin(angle) * dist + 80 + Math.random() * 280;
@@ -99,17 +108,16 @@ function launchPetal(
 
   const rot0 = Math.random() * 360;
   const rd   = (Math.random() > 0.5 ? 1 : -1) * (60 + Math.random() * 120);
-  const s    = 0.8 + Math.random() * 0.4;
   const dur  = 4000 + Math.random() * 3500;
   const del  = Math.random() * 350;
 
-  const div = spawnDiv(cx - 11, cy - 12, "burst");
+  const div = spawnDiv(cx - Math.round(11 * scale), cy - Math.round(12 * scale), "burst", scale);
 
   div.animate(
     [
-      { transform: `translate(0,0) rotate(${rot0}deg) scale(${s * 0.5})`,                             opacity: 0.9, offset: 0    },
-      { transform: `translate(${midX}px,${midY}px) rotate(${rot0 + rd * 0.5}deg) scale(${s})`,        opacity: 1,   offset: 0.65 },
-      { transform: `translate(${dx}px,${dy}px) rotate(${rot0 + rd}deg) scale(${s * 0.5})`,            opacity: 0,   offset: 1    },
+      { transform: `translate(0,0) rotate(${rot0}deg) scale(${0.5})`,                             opacity: 0.9, offset: 0    },
+      { transform: `translate(${midX}px,${midY}px) rotate(${rot0 + rd * 0.5}deg) scale(${1})`,   opacity: 1,   offset: 0.65 },
+      { transform: `translate(${dx}px,${dy}px) rotate(${rot0 + rd}deg) scale(${0.5})`,            opacity: 0,   offset: 1    },
     ],
     { duration: dur, delay: del, easing: "cubic-bezier(0.05, 0.5, 0.15, 1)", fill: "forwards" },
   ).onfinish = () => div.remove();
@@ -118,24 +126,68 @@ function launchPetal(
 // ── Rain petal ───────────────────────────────────────────────────
 
 function spawnRainPetal() {
-  const x   = Math.random() * window.innerWidth;
-  const div = spawnDiv(x, -30, "rain");
+  const x     = Math.random() * window.innerWidth;
+  const scale = 0.4 + Math.random() * 1.1;           // 0.4x – 1.5x size variety
+  const div   = spawnDiv(x, -Math.round(30 * scale), "rain", scale);
 
-  const drift = -20 + (Math.random() - 0.3) * 80;
-  const rot   = Math.random() * 360;
-  const rd    = (Math.random() > 0.5 ? 1 : -1) * (180 + Math.random() * 180);
-  const dur   = 3500 + Math.random() * 3000;
+  // Wind: global direction + personal sway oscillation
+  const windDrift  = _wind * window.innerWidth * 0.18;
+  const personal   = (Math.random() - 0.5) * 100;
+  const totalDrift = windDrift + personal;
 
+  // Sway amplitude per petal — smaller petals sway more
+  const swayAmp = (30 + Math.random() * 60) * (1.2 - scale * 0.3);
+  const swayDir = Math.random() > 0.5 ? 1 : -1;
+
+  const rot = Math.random() * 360;
+  const rd  = (Math.random() > 0.5 ? 1 : -1) * (90 + Math.random() * 200);
+  const dur = 5000 + Math.random() * 5000;
+
+  // S-curve: petal sways as it drifts down, not a straight line
   div.animate(
     [
-      { transform: `translate(0,0) rotate(${rot}deg) scale(0.8)`,                                     opacity: 0,   offset: 0    },
-      { transform: `translate(0,0) rotate(${rot}deg) scale(0.9)`,                                     opacity: 0.9, offset: 0.06 },
-      { transform: `translate(${drift * 0.5}px,50vh) rotate(${rot + rd * 0.5}deg) scale(1)`,          opacity: 0.9, offset: 0.5  },
-      { transform: `translate(${drift * 0.9}px,95vh) rotate(${rot + rd * 0.9}deg) scale(0.85)`,       opacity: 0.8, offset: 0.92 },
-      { transform: `translate(${drift}px,115vh) rotate(${rot + rd}deg) scale(0.7)`,                   opacity: 0,   offset: 1    },
+      {
+        transform: `translate(0,0) rotate(${rot}deg) scale(0.8)`,
+        opacity: 0, offset: 0,
+      },
+      {
+        transform: `translate(0,0) rotate(${rot}deg) scale(1)`,
+        opacity: 0.85, offset: 0.05,
+      },
+      {
+        transform: `translate(${totalDrift * 0.25 + swayAmp * swayDir}px,22vh) rotate(${rot + rd * 0.22}deg) scale(1)`,
+        opacity: 0.9, offset: 0.25,
+      },
+      {
+        transform: `translate(${totalDrift * 0.5 - swayAmp * swayDir * 0.6}px,48vh) rotate(${rot + rd * 0.48}deg) scale(0.97)`,
+        opacity: 0.85, offset: 0.5,
+      },
+      {
+        transform: `translate(${totalDrift * 0.75 + swayAmp * swayDir * 0.4}px,74vh) rotate(${rot + rd * 0.74}deg) scale(0.9)`,
+        opacity: 0.7, offset: 0.75,
+      },
+      {
+        transform: `translate(${totalDrift}px,112vh) rotate(${rot + rd}deg) scale(0.7)`,
+        opacity: 0, offset: 1,
+      },
     ],
     { duration: dur, easing: "linear", fill: "forwards" },
   ).onfinish = () => div.remove();
+}
+
+// ── Wind simulation ───────────────────────────────────────────────
+
+function startWind() {
+  _wind = (Math.random() - 0.5) * 1.2;
+  _windTimer = setInterval(() => {
+    // Gradually shift wind direction with small random steps
+    _wind += (Math.random() - 0.5) * 0.4;
+    _wind = Math.max(-1.5, Math.min(1.5, _wind));
+  }, 1800);
+}
+
+function stopWind() {
+  if (_windTimer) { clearInterval(_windTimer); _windTimer = null; }
 }
 
 // ── Public API ───────────────────────────────────────────────────
@@ -155,7 +207,7 @@ export function triggerBurst(cx: number, cy: number) {
     "border-radius:50%",
     "border:3px solid rgba(255,182,205,0.9)",
     "pointer-events:none",
-    "z-index:9999",
+    "z-index:2",
   ].join(";");
   document.body.append(ring);
   ring.animate(
@@ -170,8 +222,8 @@ export function triggerBurst(cx: number, cy: number) {
   for (let i = 0; i < 140; i++) {
     const angle    = (i / 140) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
     const distMult = Math.cos(angle) < 0
-      ? 2.5 + Math.random() * 1.3   // left:  2.5–3.8
-      : 0.7 + Math.random() * 1.3;  // right: 0.7–2.0
+      ? 2.5 + Math.random() * 1.3
+      : 0.7 + Math.random() * 1.3;
     launchPetal(cx, cy, angle, distMult, maxReach);
   }
 
@@ -186,6 +238,7 @@ export function triggerBurst(cx: number, cy: number) {
 /** Start continuous sakura rain from top. Call ~3s after triggerBurst. */
 export function startRain() {
   if (_rainTimer) return;
+  startWind();
   let tick = 0;
   _rainTimer = setInterval(() => {
     const count = tick < 15 ? 3 : 2;
@@ -200,5 +253,6 @@ export function stopRain() {
     clearInterval(_rainTimer);
     _rainTimer = null;
   }
+  stopWind();
   document.querySelectorAll("[data-sakura='rain']").forEach((el) => el.remove());
 }
