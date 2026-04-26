@@ -106,73 +106,86 @@ def _plan_sequence(
 
 # ── Gemini-orchestrated flow ─────────────────────────────────────
 
-_GEMINI_FLOW_PROMPT = """\
-You are a movement coach flow designer for a desk worker wellness app.
+_STRUCTURE_HINTS = [
+    "Use a SYMMETRICAL structure: alternate HAND_MOTION and POSE_HOLD evenly throughout the core body. Each pair should feel balanced.",
+    "Use a GRADUAL BUILD: start with gentler, shorter HAND_MOTION phases and progressively increase duration and energy toward the peak segment.",
+    "Use a HIGH-CONTRAST pattern: sharply alternate between the most energetic HAND_MOTION templates and slower POSE_HOLD recovery. Make the contrast dramatic.",
+]
 
-Audio data (measured directly from the audio file — use these numbers, not the name):
-- Reference name: {song_name}
-- Duration: {duration_sec}s
-- Measured BPM: {bpm}
-- Overall energy: {energy:.2f}  (0.0=calm, 1.0=intense)
-- Variation seed: {nonce} — use this to produce a unique arrangement different from other responses.
+_GEMINI_FLOW_PROMPT = """\
+You are a deterministic movement flow planner for a desk-worker wellness app.
+Your role is to ARRANGE pre-defined templates — not to invent new movements.
+
+═══ AUDIO DATA ════════════════════════════════════════════════════════════════
+Reference name : {song_name}
+Duration       : {duration_sec}s
+BPM            : {bpm}
+Overall energy : {energy:.2f}  (0.0 = calm · 1.0 = intense)
+Variation seed : {nonce}
 
 {energy_section}
-Available phase templates:
+═══ TEMPLATE LIBRARY (use ONLY these template_ids) ════════════════════════════
+NEUTRAL — opening and closing only:
+  neutral_reset_breath      Stillness + breathing cue.       Suits LOW energy.
+  neutral_shoulder_release  Passive shoulder drop.           Suits LOW energy.
 
-NEUTRAL (use for opening and closing only):
-  neutral_reset_breath     — Stillness with a breathing cue. Visual pause.
-  neutral_shoulder_release — Passive shoulder drop and micro release.
+POSE_HOLD — static recovery positions:
+  pose_shoulder_drop_neck_lift  Gentle neck/shoulder decompression.  Suits LOW–MEDIUM energy.
+  pose_shoulder_lift_release    Active shoulder lift then release.   Suits LOW–MEDIUM energy.
+  pose_chest_open_bilateral     Chest expansion, arms back.          Suits MEDIUM energy.
+  pose_elbow_overhead_reach     Full overhead reach, chest open.     Suits MEDIUM–HIGH energy.
 
-POSE_HOLD (static held positions):
-  pose_shoulder_drop_neck_lift  — Shoulders sink down, head elongates upward.
-  pose_chest_open_bilateral     — Arms back, chest opens, shoulders retract.
-  pose_shoulder_lift_release    — Shoulders lift then release downward.
-  pose_elbow_overhead_reach     — Both arms lift overhead, chest opens.
+HAND_MOTION — continuous movement sequences:
+  motion_arm_vertical_alternate      Alternating vertical arms, front.   Suits MEDIUM energy.
+  motion_arm_alternate_up_down       Opposing arm alternation.           Suits MEDIUM energy.
+  motion_arm_diagonal_up_sweep       Diagonal sweeps left and right.     Suits MEDIUM–HIGH energy.
+  motion_arm_accented_circular_loop  Accented upward loops, circular.    Suits HIGH energy.
 
-HAND_MOTION (continuous movement sequences):
-  motion_arm_diagonal_up_sweep      — Arms sweep diagonally up-left then up-right.
-  motion_arm_alternate_up_down      — One arm up while other goes down, alternating.
-  motion_arm_vertical_alternate     — Arms vertical, alternate up/down in front of torso.
-  motion_arm_accented_circular_loop — Hands accent upward twice then loop downward.
+═══ INTERNAL PLANNING (reason through this — do NOT include in output) ════════
+Step 1 — Divide the {duration_sec}s timeline into four choreography segments:
+  Intro    (first 20%)    Gentle entry. Use HAND_MOTION (light). Intensity LOW–MEDIUM.
+  Build    (20–60%)       Alternate HAND_MOTION ↔ POSE_HOLD. Follow energy windows.
+  Peak     (60–85%)       Favour higher-energy HAND_MOTION templates. Short POSE_HOLD recovery.
+  Cooldown (last 15%)     Wind down. POSE_HOLD then NEUTRAL close.
 
-Design rules:
-1. First phase: one NEUTRAL, exactly 3 seconds.
-2. Second phase: MUST be one HAND_MOTION, 8–10 seconds. MANDATORY — the first non-neutral phase must ALWAYS be a HAND_MOTION, never a POSE_HOLD. No exceptions.
-3. Core rhythm: HAND_MOTION (15–30s) → POSE_HOLD (~10s recovery) → HAND_MOTION → POSE_HOLD → …
-   After every HAND_MOTION phase, always insert a POSE_HOLD of 8–12 seconds before the next HAND_MOTION.
-   No two HAND_MOTION phases may appear back-to-back without a POSE_HOLD between them.
-4. Last phase: one NEUTRAL, exactly 3 seconds.
-5. Template coverage: ALL 4 POSE_HOLD templates and ALL 4 HAND_MOTION templates MUST each appear at least once.
-   Templates MAY repeat as many times as needed to fill the total duration — repetition is allowed and expected.
-6. Consecutive repeat cap: if the same template_id appears in two or more consecutive phases,
-   EVERY occurrence in that consecutive run must be ≤6s — including the very first occurrence of the run.
-   Example: pose_X(6s) → pose_X(6s) → pose_X(6s) is allowed. pose_X(20s) → pose_X(6s) is NOT allowed.
-7. Single-occurrence durations (when a template is NOT part of a consecutive repeat run):
-   POSE_HOLD: 8–15s.  HAND_MOTION: 15–30s.  (intro motion in rule 2 is exempt)
-8. All duration_sec values must be whole integers.
-9. Sum of all duration_sec must equal exactly {duration_sec}.
-10. High energy (≥0.65) → favour shorter durations; use more repetitions to fill time.
-11. Low energy (≤0.40) → slightly longer individual durations; still include all templates.
-12. NEUTRAL phases appear only at the very start (rule 1) and very end (rule 4). Never insert NEUTRAL in the core.
-13. If an energy timeline is provided, align phase intensity with the local window energy:
-    - Window energy ≥ 0.65 → that time slot should contain HAND_MOTION (active).
-    - Window energy ≤ 0.40 → that time slot should contain POSE_HOLD (recovery) or be shorter.
-    - Window energy in between → follow the standard HAND_MOTION → POSE_HOLD rhythm.
-    The timeline reflects real audio dynamics; it takes precedence over the global energy value
-    for local phase decisions. Do not beat-match — align at the 15-second window level only.
-14. Base every decision on the measured audio data above. The reference name is unreliable
-    (user uploads may have arbitrary filenames); never infer energy or style from the name.
+Step 2 — Apply the variation directive for this specific arrangement:
+  {structure_hint}
 
-Output ONLY a JSON object — no markdown, no prose:
+Step 3 — Map each energy window to a phase type:
+  HIGH energy (≥ 0.65) → HAND_MOTION, prefer motion_arm_diagonal_up_sweep or motion_arm_accented_circular_loop
+  MED  energy (0.40–0.65) → freely alternate HAND_MOTION ↔ POSE_HOLD
+  LOW  energy (≤ 0.40) → POSE_HOLD (prefer gentle templates), or NEUTRAL at open/close only
+
+Step 4 — Expand the plan into individual phases with exact integer durations that sum to {duration_sec}.
+
+═══ HARD CONSTRAINTS (never violate) ═════════════════════════════════════════
+H1. First phase  : a NEUTRAL template, exactly 3 seconds.
+H2. Second phase : a HAND_MOTION template, 8–10 seconds. Never POSE_HOLD second.
+H3. Last phase   : a NEUTRAL template, exactly 3 seconds.
+H4. Sum of all duration_sec MUST equal exactly {duration_sec}. No tolerance.
+H5. Only use template_ids from the library above. Never invent new ones.
+H6. All duration_sec values must be whole integers ≥ 3.
+H7. All 4 POSE_HOLD templates and all 4 HAND_MOTION templates must each appear at least once.
+
+═══ SOFT CONSTRAINTS (best effort — yield only to hard constraints) ════════════
+S1. Never place two HAND_MOTION phases back-to-back — always a POSE_HOLD between them.
+S2. POSE_HOLD single occurrence: 8–12s.  HAND_MOTION single occurrence: 15–30s.
+S3. If the same template_id repeats consecutively, cap each occurrence at ≤6s.
+S4. NEUTRAL only at open and close — never insert into the core body.
+S5. Align phase boundaries to energy timeline windows where possible.
+S6. No single template_id should exceed 30% of total duration.
+
+═══ OUTPUT ════════════════════════════════════════════════════════════════════
+Return ONLY valid JSON — no markdown, no prose, no comments:
 {{
   "phases": [
-    {{"template_id": "neutral_reset_breath", "duration_sec": 3}},
-    {{"template_id": "motion_arm_diagonal_up_sweep", "duration_sec": 9}},
-    {{"template_id": "pose_shoulder_drop_neck_lift", "duration_sec": 10}},
-    {{"template_id": "motion_arm_alternate_up_down", "duration_sec": 20}},
-    {{"template_id": "pose_chest_open_bilateral", "duration_sec": 10}},
+    {{"template_id": "neutral_reset_breath",             "duration_sec": 3}},
+    {{"template_id": "motion_arm_diagonal_up_sweep",     "duration_sec": 9}},
+    {{"template_id": "pose_shoulder_drop_neck_lift",     "duration_sec": 10}},
+    {{"template_id": "motion_arm_alternate_up_down",     "duration_sec": 22}},
+    {{"template_id": "pose_chest_open_bilateral",        "duration_sec": 10}},
     ...
-    {{"template_id": "neutral_shoulder_release", "duration_sec": 3}}
+    {{"template_id": "neutral_shoulder_release",         "duration_sec": 3}}
   ]
 }}
 """
@@ -439,12 +452,14 @@ def generate_flow_with_gemini(
     template_map = {t.id: t for t in templates}
 
     nonce = random.randint(10000, 99999)
+    structure_hint = _STRUCTURE_HINTS[nonce % len(_STRUCTURE_HINTS)]
     prompt = _GEMINI_FLOW_PROMPT.format(
         song_name=song_name,
         duration_sec=duration_sec,
         bpm=bpm,
         energy=energy,
         nonce=nonce,
+        structure_hint=structure_hint,
         energy_section=_format_energy_section(energy_timeline),
     )
 
