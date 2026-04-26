@@ -2,8 +2,12 @@
 .DS_Store
 **/.DS_Store
 
-# scratch / test audio at repo root
-*.mp3
+# audio files
+**/*.mp3
+
+# internal docs (keep only root README.md)
+*.md
+!/README.md
 
 # scratch design assets at repo root
 avatar-body.svg
