@@ -110,17 +110,19 @@ function planSequence<T extends string>(sequence: readonly T[], count: number): 
 }
 
 export function buildFallbackFlow(songName: string, durationSec: number): Flow {
-  // Motion-only fallback: neutral(3s) → [motion × N] → neutral(3s)
-  // No pose holds — keeps movement visually continuous.
-  // Cycles through all 4 Rive motion animations in round-robin order.
-  const OPEN = 3, CLOSE = 3, MOTION_DUR = 22;
-  const available = durationSec - OPEN - CLOSE;
-  const numMotions = Math.max(1, Math.round(available / MOTION_DUR));
-  const motionPlan = planSequence(MOTION_SEQUENCE, numMotions);
+  // Structure: neutral(3s) → hand_motion(10s) → [pose_hold(10s) → hand_motion(20s)] × N → neutral(3s)
+  // First non-neutral must always be hand_motion (matches backend rule).
+  const OPEN = 3, CLOSE = 3, INTRO_MOTION = 10, POSE_DUR = 10, MOTION_DUR = 20;
+  const PAIR_DUR = POSE_DUR + MOTION_DUR;
+
+  const available = durationSec - OPEN - CLOSE - INTRO_MOTION;
+  const numPairs = Math.max(0, Math.floor(available / PAIR_DUR));
 
   const phases: Phase[] = [];
   let t = 0;
   let idx = 0;
+  let motionIdx = 0;
+  let poseIdx = 0;
 
   const push = (name: string, type: Phase["phase_type"], dur: number, pts: TrackedPoint[]) => {
     phases.push({
@@ -136,11 +138,13 @@ export function buildFallbackFlow(songName: string, durationSec: number): Flow {
   };
 
   push("neutral", "neutral", OPEN, []);
+  push(MOTION_SEQUENCE[motionIdx++ % MOTION_SEQUENCE.length], "hand_motion", INTRO_MOTION, MOTION_POINTS);
 
-  for (let i = 0; i < numMotions; i++) {
-    const isLast = i === numMotions - 1;
-    const dur = isLast ? Math.max(durationSec - t - CLOSE, 10) : MOTION_DUR;
-    push(motionPlan[i], "hand_motion", dur, MOTION_POINTS);
+  for (let i = 0; i < numPairs; i++) {
+    push(POSE_SEQUENCE[poseIdx++ % POSE_SEQUENCE.length], "pose_hold", POSE_DUR, POSE_POINTS);
+    const isLast = i === numPairs - 1;
+    const dur = isLast ? Math.max(durationSec - t - CLOSE, MOTION_DUR) : MOTION_DUR;
+    push(MOTION_SEQUENCE[motionIdx++ % MOTION_SEQUENCE.length], "hand_motion", dur, MOTION_POINTS);
   }
 
   push("neutral_reset_breath", "neutral", Math.max(durationSec - t, CLOSE), []);
