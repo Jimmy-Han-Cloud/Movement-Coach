@@ -27,9 +27,8 @@ def get_current_user(request: Request) -> str:
     try:
         decoded = auth.verify_id_token(token)
     except Exception as e:
-        error_type = type(e).__name__
-        logger.error(f"Token verification failed [{error_type}]: {e}")
-        raise HTTPException(status_code=401, detail=f"[{error_type}] {e}")
+        logger.error(f"Token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     uid: str = decoded["uid"]
     return uid

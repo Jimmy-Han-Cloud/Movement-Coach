@@ -70,7 +70,7 @@ export function generateFlowForSong(
       ...(songId && { song_id: songId }),
     }),
     headers: { "Content-Type": "application/json" },
-  }, 25000);
+  }, 60000);
 }
 
 // ── Offline fallback flow builder ────────────────────────────────
